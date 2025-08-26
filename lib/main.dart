@@ -4,6 +4,8 @@ import 'package:ffmpeg_kit_min_gpl/ffmpeg_kit.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:video_cutter_app/network_speed_tester.dart';
+import 'package:video_cutter_app/speedometers.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
@@ -174,6 +176,14 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
   void initState() {
     super.initState();
     _fetchSeries();
+
+
+
+
+
+
+
+    
   }
 
   Future<void> _fetchSeries() async {
@@ -614,6 +624,15 @@ class VideoCutterScreen extends StatefulWidget {
 }
 
 class _VideoCutterScreenState extends State<VideoCutterScreen> {
+
+  double _downloadSpeed = 0;
+  double _uploadSpeed = 0;
+  double _networkStrength = 0; // قيمة من 0 إلى 1
+  bool _isTestingSpeed = false;
+
+
+  String _speedTestStatus = 'انقر لقياس السرعة';
+
   bool _isProcessing = false;
   bool _isUploading = false;
   String _status = 'اضغط لاختيار الفيديو';
@@ -641,6 +660,70 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     'دقيقة واحدة': 60,
     'دقيقتين': 120,
   };
+
+
+  @override
+  void initState() {
+    super.initState();
+    // بدء قياس السرعة تلقائياً عند فتح الشاشة
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _testInternetSpeed();
+    });
+  }
+
+
+ Future<void> _testInternetSpeed() async {
+    setState(() {
+      _isTestingSpeed = true;
+      _speedTestStatus = 'جاري قياس سرعة التحميل...';
+      _downloadSpeed = 0;
+      _uploadSpeed = 0;
+      _networkStrength = 0;
+    });
+
+    try {
+      // قياس سرعة التحميل
+      final downloadSpeed = await NetworkSpeedTester.testDownloadSpeed();
+      
+      setState(() {
+        _downloadSpeed = downloadSpeed;
+        _speedTestStatus = 'جاري قياس سرعة الرفع...';
+      });
+
+      // قياس سرعة الرفع
+      final uploadSpeed = await NetworkSpeedTester.testUploadSpeed();
+      
+      setState(() {
+        _uploadSpeed = uploadSpeed;
+        _speedTestStatus = 'تم قياس السرعة';
+        _isTestingSpeed = false;
+        _networkStrength = NetworkSpeedTester.calculateNetworkStrength(
+          _downloadSpeed, 
+          _uploadSpeed
+        );
+      });
+      
+    } catch (e) {
+      setState(() {
+        _speedTestStatus = 'فشل قياس السرعة: $e';
+        _isTestingSpeed = false;
+      });
+    }
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   void _showSnackBar(String message, {bool isError = false}) {
     _scaffoldKey.currentState?.showSnackBar(
@@ -1179,6 +1262,14 @@ Future<void> _requestPermissions() async {
                 icon: const Icon(Icons.upload),
                 onPressed: _showSeriesDialog,
               ),
+
+
+
+               IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _isTestingSpeed ? null : _testInternetSpeed,
+              tooltip: 'إعادة قياس السرعة',
+            ),
           ],
         ),
         body: SingleChildScrollView(
@@ -1217,6 +1308,25 @@ Future<void> _requestPermissions() async {
                   ),
                 ),
               ),
+            Speedometers(
+                downloadSpeed: _downloadSpeed,
+                uploadSpeed: _uploadSpeed,
+                networkStrength: _networkStrength,
+                isTesting: _isTestingSpeed,
+              ),
+
+               Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  _speedTestStatus,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _isTestingSpeed ? Colors.amber : Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              
               const SizedBox(height: 16),
               Card(
                 child: Padding(
