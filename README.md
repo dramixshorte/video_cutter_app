@@ -22,7 +22,7 @@
 <p align="center">
   <img src="screenshots/home.png" width="250" alt="الصفحة الرئيسية" />
   <img src="screenshots/player.png" width="250" alt="مشغل الفيديو" />
-  <img src="screenshots/profile.png" width="250" alt="صفحة البروفايل" />
+  
 </p>
 
 > ✨ ضع لقطات شاشة للتطبيق داخل مجلد `screenshots/` في مشروعك.
