@@ -184,6 +184,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.deepPurple,
         elevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle.light,
+          shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.zero, // يخلي الحواف مستقيمة
+  ),
       ),
       body: Column(
         children: [

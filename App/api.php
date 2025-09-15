@@ -1,13 +1,7 @@
 <?php
 
 
-// زيادة مهلة التنفيذ والذاكرة
-// زيادة الحدود لتتناسب مع رفع ملفات ضخمة
-ini_set('max_execution_time', 36000);     // 10 ساعات = 36000 ثانية
-ini_set('max_input_time', 36000);         // وقت استقبال البيانات مثل POST
-ini_set('upload_max_filesize', '10000M'); // حجم الملف المرفوع
-ini_set('post_max_size', '10000M');       // حجم كامل بيانات POST
-ini_set('memory_limit', '10000M');        // أقصى ذاكرة ممكنة
+
 ini_set('zlib.output_compression', 'On');
 ini_set('zlib.output_compression_level', '6');
 
@@ -53,7 +47,7 @@ $messaging = $factory->createMessaging();
 // معلومات اتصال قاعدة البيانات
 $servername = "localhost";
 $username = "dramaxboxbbs_series";
-$password = "123456";
+$password = "dramaxboxbbs_series";
 $dbname = "dramaxboxbbs_series";
 
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -78,6 +72,9 @@ try {
         case 'check_series':
             checkSeries($conn);
             break;
+            case 'test_notification':
+    testNotification($conn);
+    break;
         case 'create_series':
             createSeries($conn);
             break;
@@ -103,6 +100,31 @@ try {
         case 'update_episode':
             updateEpisode($conn);
             break;
+            
+      case 'manage_admob':
+        manageAdmobSettings($conn);
+        break;
+    case 'manage_coin_packages':
+        manageCoinPackages($conn);
+        break;
+    case 'manage_daily_gifts':
+        manageDailyGifts($conn);
+        break;
+    case 'manage_users':
+        manageUsers($conn);
+        break;
+    case 'manage_vip_packages':
+        manageVipPackages($conn);
+        break;
+    case 'manage_app_settings':
+        manageAppSettings($conn);
+        break;
+    case 'get_dashboard_stats':
+        getDashboardStats($conn);
+        break;
+            
+            
+            
         default:
             echo json_encode(['status' => 'error', 'message' => 'Invalid action']);
             break;
@@ -688,7 +710,42 @@ function New_Methods_uploadEpisode($conn) {
 }
 
 
-
+function testNotification($conn) {
+    global $messaging;
+    
+    try {
+        $testData = [
+            'type' => 'test',
+            'series_id' => '999',
+            'series_title' => 'اختبار الإشعار',
+            'series_description' => 'هذا إشعار اختبار من API',
+            'image_url' => 'https://i.ytimg.com/vi/drnwJuK_-lY/mqdefault.jpg',
+            'send_count' => '1',
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+        
+        $notification = \Kreait\Firebase\Messaging\Notification::create(
+            'اختبار الإشعار',
+            'هذا إشعار اختبار من API'
+        );
+        
+        $message = \Kreait\Firebase\Messaging\CloudMessage::withTarget('topic', 'all')
+            ->withNotification($notification)
+            ->withData($testData);
+        
+        $result = $messaging->send($message);
+        
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'تم إرسال إشعار الاختبار بنجاح',
+            'result' => $result
+        ]);
+        
+    } catch (Exception $e) {
+        logError("Test notification failed: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
 
 
 
@@ -958,4 +1015,541 @@ function getSeries($conn) {
     $data = [];
     while ($row = $result->fetch_assoc()) $data[] = $row;
     echo json_encode(['status' => 'success', 'series' => $data]);
+}
+
+
+
+
+
+// ====================== DASHBOARD MANAGEMENT FUNCTIONS ======================
+
+// إعدادات AdMob
+function manageAdmobSettings($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $action = $input['action'] ?? '';
+    
+    if ($action === 'get') {
+        $result = $conn->query("SELECT * FROM admob_settings LIMIT 1");
+        $settings = $result->fetch_assoc();
+        echo json_encode(['status' => 'success', 'data' => $settings]);
+        return;
+    }
+    
+    if ($action === 'update') {
+        $fields = [
+            'rewarded1', 'rewarded2', 'rewarded3', 'rewarded4', 
+            'rewarded5', 'rewarded6', 'banner', 'interstitial', 'app_id'
+        ];
+        
+        $updateFields = [];
+        $params = [];
+        $types = '';
+        
+        foreach ($fields as $field) {
+            if (isset($input[$field])) {
+                $updateFields[] = "$field = ?";
+                $params[] = $input[$field];
+                $types .= 's';
+            }
+        }
+        
+        if (!empty($updateFields)) {
+            $sql = "UPDATE admob_settings SET " . implode(', ', $updateFields) . " WHERE id = 1";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'تم تحديث إعدادات AdMob']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'فشل التحديث']);
+            }
+            $stmt->close();
+        }
+        return;
+    }
+}
+
+// إدارة حزم العملات
+function manageCoinPackages($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $action = $input['action'] ?? '';
+    
+    if ($action === 'get_all') {
+        $result = $conn->query("SELECT * FROM coin_packages ORDER BY coin_amount ASC");
+        $packages = [];
+        while ($row = $result->fetch_assoc()) {
+            $packages[] = $row;
+        }
+        echo json_encode(['status' => 'success', 'data' => $packages]);
+        return;
+    }
+    
+    if ($action === 'create') {
+        $required = ['coin_amount', 'price', 'required_ads', 'google_play_product_id'];
+        foreach ($required as $field) {
+            if (!isset($input[$field])) {
+                echo json_encode(['status' => 'error', 'message' => "حقل $field مطلوب"]);
+                return;
+            }
+        }
+        
+        $stmt = $conn->prepare("INSERT INTO coin_packages (coin_amount, price, required_ads, google_play_product_id, is_popular) VALUES (?, ?, ?, ?, ?)");
+        $is_popular = $input['is_popular'] ?? 0;
+        $stmt->bind_param("idisi", $input['coin_amount'], $input['price'], $input['required_ads'], $input['google_play_product_id'], $is_popular);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['status' => 'success', 'message' => 'تم إنشاء الحزمة بنجاح', 'id' => $stmt->insert_id]);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'فشل إنشاء الحزمة']);
+        }
+        $stmt->close();
+        return;
+    }
+    
+    if ($action === 'update') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف الحزمة مطلوب']);
+            return;
+        }
+        
+        $fields = ['coin_amount', 'price', 'required_ads', 'google_play_product_id', 'is_popular'];
+        $updateFields = [];
+        $params = [];
+        $types = '';
+        
+        foreach ($fields as $field) {
+            if (isset($input[$field])) {
+                $updateFields[] = "$field = ?";
+                $params[] = $input[$field];
+                $types .= is_int($input[$field]) ? 'i' : (is_float($input[$field]) ? 'd' : 's');
+            }
+        }
+        
+        if (!empty($updateFields)) {
+            $params[] = $input['id'];
+            $types .= 'i';
+            
+            $sql = "UPDATE coin_packages SET " . implode(', ', $updateFields) . " WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'تم تحديث الحزمة بنجاح']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'فشل التحديث']);
+            }
+            $stmt->close();
+        }
+        return;
+    }
+    
+    if ($action === 'delete') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف الحزمة مطلوب']);
+            return;
+        }
+        
+        $stmt = $conn->prepare("DELETE FROM coin_packages WHERE id = ?");
+        $stmt->bind_param("i", $input['id']);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['status' => 'success', 'message' => 'تم حذف الحزمة بنجاح']);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'فشل الحذف']);
+        }
+        $stmt->close();
+        return;
+    }
+}
+
+// إدارة الهدايا اليومية
+function manageDailyGifts($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $action = $input['action'] ?? '';
+    
+    if ($action === 'get_all') {
+        $result = $conn->query("SELECT * FROM Dailygifts ORDER BY id ASC");
+        $gifts = [];
+        while ($row = $result->fetch_assoc()) {
+            $gifts[] = $row;
+        }
+        echo json_encode(['status' => 'success', 'data' => $gifts]);
+        return;
+    }
+    
+    if ($action === 'create') {
+        $required = ['coin_amount', 'price', 'required_ads', 'cooldown_hours'];
+        foreach ($required as $field) {
+            if (!isset($input[$field])) {
+                echo json_encode(['status' => 'error', 'message' => "حقل $field مطلوب"]);
+                return;
+            }
+        }
+        
+        $stmt = $conn->prepare("INSERT INTO Dailygifts (coin_amount, price, required_ads, cooldown_hours, is_popular) VALUES (?, ?, ?, ?, ?)");
+        $is_popular = $input['is_popular'] ?? 0;
+        $stmt->bind_param("idiii", $input['coin_amount'], $input['price'], $input['required_ads'], $input['cooldown_hours'], $is_popular);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['status' => 'success', 'message' => 'تم إنشاء الهدية بنجاح', 'id' => $stmt->insert_id]);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'فشل إنشاء الهدية']);
+        }
+        $stmt->close();
+        return;
+    }
+    
+    if ($action === 'update') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف الهدية مطلوب']);
+            return;
+        }
+        
+        $fields = ['coin_amount', 'price', 'required_ads', 'cooldown_hours', 'is_popular'];
+        $updateFields = [];
+        $params = [];
+        $types = '';
+        
+        foreach ($fields as $field) {
+            if (isset($input[$field])) {
+                $updateFields[] = "$field = ?";
+                $params[] = $input[$field];
+                $types .= is_int($input[$field]) ? 'i' : (is_float($input[$field]) ? 'd' : 's');
+            }
+        }
+        
+        if (!empty($updateFields)) {
+            $params[] = $input['id'];
+            $types .= 'i';
+            
+            $sql = "UPDATE Dailygifts SET " . implode(', ', $updateFields) . " WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'تم تحديث الهدية بنجاح']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'فشل التحديث']);
+            }
+            $stmt->close();
+        }
+        return;
+    }
+    
+    if ($action === 'delete') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف الهدية مطلوب']);
+            return;
+        }
+        
+        $stmt = $conn->prepare("DELETE FROM Dailygifts WHERE id = ?");
+        $stmt->bind_param("i", $input['id']);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['status' => 'success', 'message' => 'تم حذف الهدية بنجاح']);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'فشل الحذف']);
+        }
+        $stmt->close();
+        return;
+    }
+}
+
+// إدارة المستخدمين
+function manageUsers($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $action = $input['action'] ?? '';
+    
+    if ($action === 'get_all') {
+        $page = $input['page'] ?? 1;
+        $limit = $input['limit'] ?? 20;
+        $offset = ($page - 1) * $limit;
+        
+        // جلب المستخدمين مع عدد العملات والمعاملات
+        $sql = "SELECT u.*, 
+                (SELECT COUNT(*) FROM coin_transactions ct WHERE ct.user_id = u.id) as transactions_count,
+                (SELECT COUNT(*) FROM episode_purchases ep WHERE ep.user_id = u.id) as purchases_count
+                FROM users u 
+                ORDER BY u.created_at DESC 
+                LIMIT ? OFFSET ?";
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ii", $limit, $offset);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $users = [];
+        while ($row = $result->fetch_assoc()) {
+            $users[] = $row;
+        }
+        
+        // جلب العدد الإجمالي
+        $totalResult = $conn->query("SELECT COUNT(*) as total FROM users");
+        $total = $totalResult->fetch_assoc()['total'];
+        
+        echo json_encode([
+            'status' => 'success', 
+            'data' => $users,
+            'pagination' => [
+                'current_page' => $page,
+                'total_pages' => ceil($total / $limit),
+                'total_users' => $total
+            ]
+        ]);
+        return;
+    }
+    
+    if ($action === 'update') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف المستخدم مطلوب']);
+            return;
+        }
+        
+        $allowedFields = ['coins', 'is_vip', 'vip_expiry', 'name', 'email'];
+        $updateFields = [];
+        $params = [];
+        $types = '';
+        
+        foreach ($allowedFields as $field) {
+            if (isset($input[$field])) {
+                $updateFields[] = "$field = ?";
+                $params[] = $input[$field];
+                $types .= is_int($input[$field]) ? 'i' : (is_bool($input[$field]) ? 'i' : 's');
+            }
+        }
+        
+        if (!empty($updateFields)) {
+            $params[] = $input['id'];
+            $types .= 'i';
+            
+            $sql = "UPDATE users SET " . implode(', ', $updateFields) . " WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'تم تحديث المستخدم بنجاح']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'فشل التحديث']);
+            }
+            $stmt->close();
+        }
+        return;
+    }
+    
+    if ($action === 'delete') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف المستخدم مطلوب']);
+            return;
+        }
+        
+        $conn->autocommit(false);
+        try {
+            // حذف جميع البيانات المرتبطة بالمستخدم
+            $tables = [
+                'coin_transactions',
+                'episode_purchases',
+                'likes',
+                'user_ad_watch',
+                'user_dailygifts',
+                'user_package_progress',
+                'user_sessions',
+                'user_unlocked_episodes',
+                'views'
+            ];
+            
+            foreach ($tables as $table) {
+                $conn->query("DELETE FROM $table WHERE user_id = " . $input['id']);
+            }
+            
+            // حذف المستخدم
+            $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+            $stmt->bind_param("i", $input['id']);
+            $stmt->execute();
+            
+            $conn->commit();
+            echo json_encode(['status' => 'success', 'message' => 'تم حذف المستخدم بنجاح']);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['status' => 'error', 'message' => 'فشل الحذف: ' . $e->getMessage()]);
+        } finally {
+            $conn->autocommit(true);
+        }
+        return;
+    }
+}
+
+// إدارة حزم VIP
+function manageVipPackages($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $action = $input['action'] ?? '';
+    
+    if ($action === 'get_all') {
+        $result = $conn->query("SELECT * FROM vip_packages ORDER BY duration ASC");
+        $packages = [];
+        while ($row = $result->fetch_assoc()) {
+            $packages[] = $row;
+        }
+        echo json_encode(['status' => 'success', 'data' => $packages]);
+        return;
+    }
+    
+    if ($action === 'create') {
+        $required = ['name', 'duration', 'price', 'google_play_product_id'];
+        foreach ($required as $field) {
+            if (!isset($input[$field])) {
+                echo json_encode(['status' => 'error', 'message' => "حقل $field مطلوب"]);
+                return;
+            }
+        }
+        
+        $stmt = $conn->prepare("INSERT INTO vip_packages (name, duration, price, google_play_product_id, description, is_active) VALUES (?, ?, ?, ?, ?, ?)");
+        $description = $input['description'] ?? '';
+        $is_active = $input['is_active'] ?? 1;
+        $stmt->bind_param("sidssi", $input['name'], $input['duration'], $input['price'], $input['google_play_product_id'], $description, $is_active);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['status' => 'success', 'message' => 'تم إنشاء الحزمة بنجاح', 'id' => $stmt->insert_id]);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'فشل إنشاء الحزمة']);
+        }
+        $stmt->close();
+        return;
+    }
+    
+    if ($action === 'update') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف الحزمة مطلوب']);
+            return;
+        }
+        
+        $fields = ['name', 'duration', 'price', 'google_play_product_id', 'description', 'is_active'];
+        $updateFields = [];
+        $params = [];
+        $types = '';
+        
+        foreach ($fields as $field) {
+            if (isset($input[$field])) {
+                $updateFields[] = "$field = ?";
+                $params[] = $input[$field];
+                $types .= is_int($input[$field]) ? 'i' : (is_float($input[$field]) ? 'd' : (is_bool($input[$field]) ? 'i' : 's'));
+            }
+        }
+        
+        if (!empty($updateFields)) {
+            $params[] = $input['id'];
+            $types .= 'i';
+            
+            $sql = "UPDATE vip_packages SET " . implode(', ', $updateFields) . " WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'تم تحديث الحزمة بنجاح']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'فشل التحديث']);
+            }
+            $stmt->close();
+        }
+        return;
+    }
+    
+    if ($action === 'delete') {
+        if (!isset($input['id'])) {
+            echo json_encode(['status' => 'error', 'message' => 'معرف الحزمة مطلوب']);
+            return;
+        }
+        
+        $stmt = $conn->prepare("DELETE FROM vip_packages WHERE id = ?");
+        $stmt->bind_param("i", $input['id']);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['status' => 'success', 'message' => 'تم حذف الحزمة بنجاح']);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'فشل الحذف']);
+        }
+        $stmt->close();
+        return;
+    }
+}
+
+// إعدادات التطبيق
+function manageAppSettings($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $action = $input['action'] ?? '';
+    
+    if ($action === 'get') {
+        $result = $conn->query("SELECT * FROM system_settings LIMIT 1");
+        $settings = $result->fetch_assoc();
+        
+        $appMode = $conn->query("SELECT value FROM app_config WHERE config_key = 'app_mode' LIMIT 1");
+        $settings['app_mode'] = $appMode->fetch_assoc()['value'] ?? 1;
+        
+        echo json_encode(['status' => 'success', 'data' => $settings]);
+        return;
+    }
+    
+    if ($action === 'update') {
+        $fields = [
+            'site_name', 'site_email', 'items_per_page', 'episode_price', 
+            'site_description', 'app_mode'
+        ];
+        
+        $conn->autocommit(false);
+        try {
+            foreach ($fields as $field) {
+                if (isset($input[$field])) {
+                    if ($field === 'app_mode') {
+                        $stmt = $conn->prepare("UPDATE app_config SET value = ? WHERE config_key = 'app_mode'");
+                        $stmt->bind_param("i", $input[$field]);
+                    } else {
+                        $stmt = $conn->prepare("UPDATE system_settings SET $field = ? WHERE id = 1");
+                        $stmt->bind_param("s", $input[$field]);
+                    }
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            }
+            
+            $conn->commit();
+            echo json_encode(['status' => 'success', 'message' => 'تم تحديث الإعدادات بنجاح']);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['status' => 'error', 'message' => 'فشل التحديث: ' . $e->getMessage()]);
+        } finally {
+            $conn->autocommit(true);
+        }
+        return;
+    }
+}
+
+// إحصائيات Dashboard
+function getDashboardStats($conn) {
+    $stats = [];
+    
+    // عدد المسلسلات
+    $result = $conn->query("SELECT COUNT(*) as count FROM series");
+    $stats['total_series'] = $result->fetch_assoc()['count'];
+    
+    // عدد الحلقات
+    $result = $conn->query("SELECT COUNT(*) as count FROM episodes");
+    $stats['total_episodes'] = $result->fetch_assoc()['count'];
+    
+    // عدد المستخدمين
+    $result = $conn->query("SELECT COUNT(*) as count FROM users");
+    $stats['total_users'] = $result->fetch_assoc()['count'];
+    
+    // إجمالي العملات
+    $result = $conn->query("SELECT SUM(coins) as total FROM users");
+    $stats['total_coins'] = $result->fetch_assoc()['total'] ?? 0;
+    
+    // عدد المعاملات اليوم
+    $today = date('Y-m-d');
+    $result = $conn->query("SELECT COUNT(*) as count FROM coin_transactions WHERE DATE(created_at) = '$today'");
+    $stats['today_transactions'] = $result->fetch_assoc()['count'];
+    
+    // عدد المشاهدات اليوم
+    $result = $conn->query("SELECT COUNT(*) as count FROM views WHERE DATE(created_at) = '$today'");
+    $stats['today_views'] = $result->fetch_assoc()['count'];
+    
+    echo json_encode(['status' => 'success', 'data' => $stats]);
 }
