@@ -127,7 +127,7 @@ class _AppSettingsTabState extends State<AppSettingsTab> {
             SizedBox(height: 16),
             Text('وضع التطبيق', style: TextStyle(fontWeight: FontWeight.bold)),
             DropdownButtonFormField(
-              value: _settings['app_mode']?.toString(),
+              initialValue: _settings['app_mode']?.toString(),
               items: [
                 DropdownMenuItem(value: '0', child: Text('وضع عادي')),
                 DropdownMenuItem(value: '1', child: Text('وضع صيانة')),
@@ -153,13 +153,13 @@ class _AppSettingsTabState extends State<AppSettingsTab> {
             Center(
               child: ElevatedButton(
                 onPressed: _saveSettings,
-                child: Text('حفظ الإعدادات', style: TextStyle(fontSize: 16)),
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+                child: Text('حفظ الإعدادات', style: TextStyle(fontSize: 16)),
               ),
             ),
           ],
