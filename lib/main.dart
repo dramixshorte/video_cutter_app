@@ -4,6 +4,7 @@ import 'package:ffmpeg_kit_min_gpl/ffmpeg_kit.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:video_cutter_app/dashboard_screen.dart';
 import 'package:video_cutter_app/network_speed_tester.dart';
 import 'package:video_cutter_app/speedometers.dart';
 import 'package:video_player/video_player.dart';
@@ -132,6 +133,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const SeriesListScreen(),
     const VideoCutterScreen(),
+    const DashboardScreen(),
   ];
 
   @override
@@ -145,6 +147,11 @@ class _MainScreenState extends State<MainScreen> {
         selectedItemColor: Colors.deepPurpleAccent,
         unselectedItemColor: Colors.white70,
         items: const [
+BottomNavigationBarItem(
+  icon: Icon(Icons.dashboard),
+  label: 'Dashboard',
+),
+
           BottomNavigationBarItem(
             icon: Icon(Icons.local_movies), // ✅ اسم أيقونة صحيح
             label: 'المسلسلات',

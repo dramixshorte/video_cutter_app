@@ -153,7 +153,6 @@ class _SpeedometerBase extends StatelessWidget {
   final double maxValue;
 
   const _SpeedometerBase({
-    Key? key,
     required this.title,
     required this.value,
     required this.isTesting,
@@ -161,7 +160,7 @@ class _SpeedometerBase extends StatelessWidget {
     required this.icon,
     required this.unit,
     required this.maxValue,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
