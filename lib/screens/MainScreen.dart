@@ -37,11 +37,11 @@ class _MainScreenState extends State<MainScreen> {
 
           BottomNavigationBarItem(
             icon: Icon(Icons.local_movies), // ✅ اسم أيقونة صحيح
-            label: 'المسلسلات',
+            label: 'TV series',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.video_library),
-            label: 'قص الفيديو',
+            label: 'Video Cutter',
           ),
         ],
       ),
