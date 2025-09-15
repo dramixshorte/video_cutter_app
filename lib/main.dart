@@ -131,9 +131,9 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
+    const DashboardScreen(),
     const SeriesListScreen(),
     const VideoCutterScreen(),
-    const DashboardScreen(),
   ];
 
   @override
@@ -147,10 +147,10 @@ class _MainScreenState extends State<MainScreen> {
         selectedItemColor: Colors.deepPurpleAccent,
         unselectedItemColor: Colors.white70,
         items: const [
-BottomNavigationBarItem(
-  icon: Icon(Icons.dashboard),
-  label: 'Dashboard',
-),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
 
           BottomNavigationBarItem(
             icon: Icon(Icons.local_movies), // ✅ اسم أيقونة صحيح
@@ -183,21 +183,13 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
   void initState() {
     super.initState();
     _fetchSeries();
-
-
-
-
-
-
-
-    
   }
 
   Future<void> _fetchSeries() async {
     setState(() => _isLoading = true);
     try {
       final response = await http.get(
-        Uri.parse('https://dramabox1.site/App/api.php?action=get_all_series'),
+        Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=get_all_series'),
       );
 
       final data = jsonDecode(response.body);
@@ -241,7 +233,7 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
   Future<void> _deleteSeries(int seriesId, String imagePath) async {
     try {
       final response = await http.post(
-        Uri.parse('https://dramabox1.site/App/api.php?action=delete_series'),
+        Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=delete_series'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'series_id': seriesId, 'image_path': imagePath}),
       );
@@ -329,7 +321,7 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: Image.network(
-                                  'https://dramabox1.site/App/series_images/${series['image_path']}',
+                                  'https://dramaxbox.bbs.tr/App/series_images/${series['image_path']}',
                                   width: 80,
                                   height: 80,
                                   fit: BoxFit.cover,
@@ -421,7 +413,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
     setState(() => _isLoading = true);
     try {
       final response = await http.post(
-        Uri.parse('https://dramabox1.site/App/api.php?action=get_episodes'),
+        Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=get_episodes'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'series_id': seriesId}),
       );
@@ -466,7 +458,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
   Future<void> _deleteEpisode(int episodeId, String videoPath) async {
     try {
       final response = await http.post(
-        Uri.parse('https://dramabox1.site/App/api.php?action=delete_episode'),
+        Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=delete_episode'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'episode_id': episodeId, 'video_path': videoPath}),
       );
@@ -517,7 +509,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
   Future<void> _updateEpisodeTitle(int episodeId, String newTitle) async {
     try {
       final response = await http.post(
-        Uri.parse('https://dramabox1.site/App/api.php?action=update_episode'),
+        Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=update_episode'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'episode_id': episodeId, 'title': newTitle}),
       );
@@ -559,7 +551,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.network(
-                        'https://dramabox1.site/App/series_images/${widget.imagePath}',
+                        'https://dramaxbox.bbs.tr/App/series_images/${widget.imagePath}',
                         width: double.infinity,
                         height: 200,
                         fit: BoxFit.cover,
@@ -631,12 +623,10 @@ class VideoCutterScreen extends StatefulWidget {
 }
 
 class _VideoCutterScreenState extends State<VideoCutterScreen> {
-
   double _downloadSpeed = 0;
   double _uploadSpeed = 0;
   double _networkStrength = 0; // قيمة من 0 إلى 1
   bool _isTestingSpeed = false;
-
 
   String _speedTestStatus = 'انقر لقياس السرعة';
 
@@ -656,7 +646,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
   final GlobalKey<ScaffoldMessengerState> _scaffoldKey =
       GlobalKey<ScaffoldMessengerState>();
 
-  static const String apiUrl = 'https://dramabox1.site/App/api.php';
+  static const String apiUrl = 'https://dramaxbox.bbs.tr/App/api.php';
 
   final Map<String, int> durationOptions = {
     '3 دقائق': 180,
@@ -668,7 +658,6 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     'دقيقتين': 120,
   };
 
-
   @override
   void initState() {
     super.initState();
@@ -678,8 +667,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     });
   }
 
-
- Future<void> _testInternetSpeed() async {
+  Future<void> _testInternetSpeed() async {
     setState(() {
       _isTestingSpeed = true;
       _speedTestStatus = 'جاري قياس سرعة التحميل...';
@@ -691,7 +679,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     try {
       // قياس سرعة التحميل
       final downloadSpeed = await NetworkSpeedTester.testDownloadSpeed();
-      
+
       setState(() {
         _downloadSpeed = downloadSpeed;
         _speedTestStatus = 'جاري قياس سرعة الرفع...';
@@ -699,17 +687,16 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
 
       // قياس سرعة الرفع
       final uploadSpeed = await NetworkSpeedTester.testUploadSpeed();
-      
+
       setState(() {
         _uploadSpeed = uploadSpeed;
         _speedTestStatus = 'تم قياس السرعة';
         _isTestingSpeed = false;
         _networkStrength = NetworkSpeedTester.calculateNetworkStrength(
-          _downloadSpeed, 
-          _uploadSpeed
+          _downloadSpeed,
+          _uploadSpeed,
         );
       });
-      
     } catch (e) {
       setState(() {
         _speedTestStatus = 'فشل قياس السرعة: $e';
@@ -717,20 +704,6 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
       });
     }
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   void _showSnackBar(String message, {bool isError = false}) {
     _scaffoldKey.currentState?.showSnackBar(
@@ -743,13 +716,13 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     );
   }
 
-Future<void> _requestPermissions() async {
-  await [
-    Permission.storage, 
-    Permission.manageExternalStorage,
-    Permission.accessMediaLocation, // إضافة صلاحية جديدة
-  ].request();
-}
+  Future<void> _requestPermissions() async {
+    await [
+      Permission.storage,
+      Permission.manageExternalStorage,
+      Permission.accessMediaLocation, // إضافة صلاحية جديدة
+    ].request();
+  }
 
   Future<String> _getSaveDirectory() async {
     try {
@@ -919,7 +892,8 @@ Future<void> _requestPermissions() async {
             ? remaining
             : segmentDuration;
 
-        final outputPath = '${saveDir.trim()}/part_${i + 1}.mp4'; // إزالة المسافات من المسار فقط
+        final outputPath =
+            '${saveDir.trim()}/part_${i + 1}.mp4'; // إزالة المسافات من المسار فقط
         setState(() {
           _currentPart = i + 1;
           _progress = _currentPart / _totalParts;
@@ -1270,9 +1244,7 @@ Future<void> _requestPermissions() async {
                 onPressed: _showSeriesDialog,
               ),
 
-
-
-               IconButton(
+            IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _isTestingSpeed ? null : _testInternetSpeed,
               tooltip: 'إعادة قياس السرعة',
@@ -1315,14 +1287,14 @@ Future<void> _requestPermissions() async {
                   ),
                 ),
               ),
-            Speedometers(
+              Speedometers(
                 downloadSpeed: _downloadSpeed,
                 uploadSpeed: _uploadSpeed,
                 networkStrength: _networkStrength,
                 isTesting: _isTestingSpeed,
               ),
 
-               Padding(
+              Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   _speedTestStatus,
@@ -1333,7 +1305,7 @@ Future<void> _requestPermissions() async {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
               Card(
                 child: Padding(
