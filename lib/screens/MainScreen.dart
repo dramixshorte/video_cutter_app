@@ -23,7 +23,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: _buildCustomNavigationBar(),
+      bottomNavigationBar: SafeArea(child: _buildCustomNavigationBar()),
     );
   }
 
@@ -73,7 +73,7 @@ class _MainScreenState extends State<MainScreen> {
     required int index,
   }) {
     final isSelected = _currentIndex == index;
-    
+
     return Expanded(
       child: Material(
         color: Colors.transparent,
@@ -84,7 +84,9 @@ class _MainScreenState extends State<MainScreen> {
             padding: EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              color: isSelected ? Color(0xFF6C63FF).withOpacity(0.2) : Colors.transparent,
+              color: isSelected
+                  ? Color.fromARGB(255, 253, 4, 141).withOpacity(0.2)
+                  : Colors.transparent,
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -93,12 +95,12 @@ class _MainScreenState extends State<MainScreen> {
                   duration: Duration(milliseconds: 300),
                   padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: isSelected ? Color(0xFF6C63FF) : Colors.transparent,
+                    color: isSelected ? Color.fromARGB(255, 255, 99, 185) : Colors.transparent,
                     shape: BoxShape.circle,
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: Color(0xFF6C63FF).withOpacity(0.4),
+                              color: Color.fromARGB(255, 255, 99, 138).withOpacity(0.4),
                               blurRadius: 8,
                               spreadRadius: 2,
                             ),
@@ -115,9 +117,11 @@ class _MainScreenState extends State<MainScreen> {
                 AnimatedDefaultTextStyle(
                   duration: Duration(milliseconds: 300),
                   style: TextStyle(
-                    color: isSelected ? Color(0xFF6C63FF) : Colors.white70,
+                    color: isSelected ? Color.fromARGB(255, 255, 2, 57) : Colors.white70,
                     fontSize: isSelected ? 12 : 11,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
                   ),
                   child: Text(
                     label,

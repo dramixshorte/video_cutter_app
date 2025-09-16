@@ -581,7 +581,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
                     icon: const Icon(Icons.image),
                     label: const Text('اختر صورة للمسلسل'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurpleAccent,
+                      backgroundColor: const Color.fromARGB(255, 255, 77, 92),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -661,7 +661,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
                       const Icon(
                         Icons.video_library,
                         size: 48,
-                        color: Colors.deepPurpleAccent,
+                        color: Color.fromARGB(255, 245, 2, 2),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -770,7 +770,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
                 LinearProgressIndicator(
                   value: _progress,
                   backgroundColor: Colors.grey[800],
-                  color: Colors.deepPurpleAccent,
+                  color: const Color.fromARGB(255, 255, 77, 107),
                   minHeight: 8,
                 ),
                 const SizedBox(height: 8),

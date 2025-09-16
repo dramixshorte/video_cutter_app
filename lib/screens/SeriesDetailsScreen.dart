@@ -617,9 +617,10 @@ class VideoPlayerScreen extends StatefulWidget {
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  late VideoPlayerController _videoPlayerController;
-  late ChewieController _chewieController;
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
   bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -630,49 +631,60 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   Future<void> _initializeVideoPlayer() async {
     try {
       _videoPlayerController = VideoPlayerController.network(widget.videoUrl);
-      await _videoPlayerController.initialize();
+      
+      await _videoPlayerController!.initialize().timeout(Duration(seconds: 10));
+
+      if (!mounted) return;
 
       _chewieController = ChewieController(
-        videoPlayerController: _videoPlayerController,
+        videoPlayerController: _videoPlayerController!,
         autoPlay: true,
         looping: false,
-        aspectRatio: _videoPlayerController.value.aspectRatio,
+        aspectRatio: _videoPlayerController!.value.aspectRatio,
         placeholder: Container(
           color: Colors.black,
           child: Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 255, 5, 39)),
             ),
           ),
         ),
         materialProgressColors: ChewieProgressColors(
-          playedColor: Color(0xFF6C63FF),
-          handleColor: Color(0xFF6C63FF),
+          playedColor: Color.fromARGB(255, 233, 2, 41),
+          handleColor: Color.fromARGB(255, 255, 4, 17),
           backgroundColor: Colors.white54,
           bufferedColor: Colors.white24,
         ),
         allowFullScreen: true,
         allowMuting: true,
         showControls: true,
+        errorBuilder: (context, errorMessage) {
+          return Center(
+            child: Text(
+              'حدث خطأ في تشغيل الفيديو',
+              style: TextStyle(color: Colors.white),
+            ),
+          );
+        },
       );
 
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _hasError = false;
+      });
     } catch (e) {
       print('Error initializing video player: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('خطأ في تشغيل الفيديو'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      Navigator.pop(context);
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
     }
   }
 
   @override
   void dispose() {
-    _videoPlayerController.dispose();
-    _chewieController.dispose();
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
@@ -687,13 +699,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       ),
       body: _isLoading
           ? Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 255, 99, 190)),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'جاري تحميل الفيديو...',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
               ),
             )
-          : Center(
-              child: Chewie(controller: _chewieController),
-            ),
+          : _hasError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red, size: 50),
+                      SizedBox(height: 16),
+                      Text(
+                        'خطأ في تشغيل الفيديو',
+                        style: TextStyle(color: Colors.white, fontSize: 18),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'تأكد من اتصال الإنترنت وحاول مرة أخرى',
+                        style: TextStyle(color: Colors.white70),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 20),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Color(0xFF6C63FF),
+                        ),
+                        onPressed: _initializeVideoPlayer,
+                        child: Text('إعادة المحاولة'),
+                      ),
+                    ],
+                  ),
+                )
+              : Chewie(controller: _chewieController!),
     );
   }
 }

@@ -11,7 +11,7 @@ class VideoCutterApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.dark(
-          primary: Colors.deepPurpleAccent,
+          primary: const Color.fromARGB(255, 247, 2, 96),
           secondary: Colors.tealAccent,
           surface: const Color(0xFF121212),
         ),
@@ -25,7 +25,7 @@ class VideoCutterApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurpleAccent,
+            backgroundColor: const Color.fromARGB(255, 255, 77, 116),
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -50,7 +50,7 @@ class VideoCutterApp extends StatelessWidget {
           ),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.deepPurpleAccent,
+          backgroundColor: Color.fromARGB(255, 255, 77, 116),
           elevation: 4,
           centerTitle: true,
           shape: RoundedRectangleBorder(
@@ -58,7 +58,7 @@ class VideoCutterApp extends StatelessWidget {
           ),
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: Colors.deepPurpleAccent,
+          backgroundColor: const Color.fromARGB(255, 226, 5, 5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),

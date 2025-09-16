@@ -68,7 +68,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 233, 4, 119)),
             ),
             SizedBox(height: 16),
             Text(
