@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class CoinPackagesTab extends StatefulWidget {
+  const CoinPackagesTab({super.key});
+
   @override
   _CoinPackagesTabState createState() => _CoinPackagesTabState();
 }
@@ -98,7 +100,6 @@ class _CoinPackagesTabState extends State<CoinPackagesTab> {
       context: context,
       builder: (context) => Theme(
         data: Theme.of(context).copyWith(
-          dialogBackgroundColor: Color(0xFF2D2D44),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
             fillColor: Colors.white.withOpacity(0.07),
@@ -112,7 +113,7 @@ class _CoinPackagesTabState extends State<CoinPackagesTab> {
             ),
             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             labelStyle: TextStyle(color: Colors.white70),
-          ),
+          ), dialogTheme: DialogThemeData(backgroundColor: Color(0xFF2D2D44)),
         ),
         child: Dialog(
           shape: RoundedRectangleBorder(

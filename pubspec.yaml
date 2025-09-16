@@ -47,6 +47,7 @@ dependencies:
   wakelock_plus: ^1.3.2
   path: ^1.8.2
   async: ^2.10.0
+  chewie: ^1.13.0
 
 dev_dependencies:
   flutter_test:

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class VipPackagesTab extends StatefulWidget {
+  const VipPackagesTab({super.key});
+
   @override
   _VipPackagesTabState createState() => _VipPackagesTabState();
 }
@@ -128,7 +130,6 @@ class _VipPackagesTabState extends State<VipPackagesTab> {
       context: context,
       builder: (context) => Theme(
         data: Theme.of(context).copyWith(
-          dialogBackgroundColor: Color(0xFF2D2D44),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
             fillColor: Colors.white.withOpacity(0.07),
@@ -142,7 +143,7 @@ class _VipPackagesTabState extends State<VipPackagesTab> {
             ),
             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             labelStyle: TextStyle(color: Colors.white70),
-          ),
+          ), dialogTheme: DialogThemeData(backgroundColor: Color(0xFF2D2D44)),
         ),
         child: Dialog(
           shape: RoundedRectangleBorder(

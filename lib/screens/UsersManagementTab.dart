@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class UsersManagementTab extends StatefulWidget {
+  const UsersManagementTab({super.key});
+
   @override
   _UsersManagementTabState createState() => _UsersManagementTabState();
 }
@@ -12,7 +14,7 @@ class _UsersManagementTabState extends State<UsersManagementTab> {
   bool _isLoading = true;
   int _currentPage = 1;
   int _totalPages = 1;
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -163,7 +165,6 @@ class _UsersManagementTabState extends State<UsersManagementTab> {
       context: context,
       builder: (context) => Theme(
         data: Theme.of(context).copyWith(
-          dialogBackgroundColor: Color(0xFF2D2D44),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
             fillColor: Colors.white.withOpacity(0.07),
@@ -177,7 +178,7 @@ class _UsersManagementTabState extends State<UsersManagementTab> {
             ),
             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             labelStyle: TextStyle(color: Colors.white70),
-          ),
+          ), dialogTheme: DialogThemeData(backgroundColor: Color(0xFF2D2D44)),
         ),
         child: Dialog(
           shape: RoundedRectangleBorder(

@@ -261,7 +261,7 @@ class _AppSettingsTabState extends State<AppSettingsTab> {
                           ),
                           padding: EdgeInsets.symmetric(horizontal: 12),
                           child: DropdownButtonFormField(
-                            value: _settings['app_mode']?.toString(),
+                            initialValue: _settings['app_mode']?.toString(),
                             items: [
                               DropdownMenuItem(
                                 value: '0',
@@ -304,7 +304,7 @@ class _AppSettingsTabState extends State<AppSettingsTab> {
                 ),
                 SizedBox(height: 16),
                 Center(
-                  child: Container(
+                  child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _saveSettings,

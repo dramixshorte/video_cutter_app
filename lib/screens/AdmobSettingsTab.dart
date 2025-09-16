@@ -312,7 +312,7 @@ class _AdmobSettingsTabState extends State<AdmobSettingsTab> {
                 ),
                 SizedBox(height: 16),
                 Center(
-                  child: Container(
+                  child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _saveSettings,
