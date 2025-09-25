@@ -78,9 +78,8 @@ try {
         case 'create_series':
             createSeries($conn);
             break;
-        case 'upload_episode':
-            New_Methods_uploadEpisode($conn);
-            break;
+       case 'upload_episode':
+            uploadEpisode($conn);
         case 'get_series':
             getSeries($conn);
             break;
@@ -118,6 +117,18 @@ try {
         break;
     case 'manage_app_settings':
         manageAppSettings($conn);
+        break;
+    case 'get_app_config':
+        getAppConfig($conn);
+        break;
+    case 'update_app_config':
+        updateAppConfig($conn);
+        break;
+    case 'get_admob_config':
+        getAdmobConfig($conn);
+        break;
+    case 'update_admob_config':
+        updateAdmobConfig($conn);
         break;
     case 'get_dashboard_stats':
         getDashboardStats($conn);
@@ -485,20 +496,23 @@ function handleImageUpload($conn) {
 
 
 
-
-
 function uploadEpisode($conn) {
-    // بداية تسجيل تفاصيل الرفع
+    if (!isset($_POST['series_id']) || !isset($_POST['episode_number'])) {
+        throw new Exception('Missing required fields');
+    }
+  // بداية تسجيل تفاصيل الرفع
     logActivity("====== بدء رفع حلقة جديدة ======");
     
-    if (!isset($_POST['series_id']) || !isset($_POST['episode_number'])) {
-        logActivity("ERROR: Missing series_id or episode_number");
-        throw new Exception('يجب تحديد معرف المسلسل ورقم الحلقة');
+  
+    
+    if (!isset($_POST['episode_number'])) {
+        logActivity("ERROR: episode_number not provided");
+        throw new Exception('Missing episode_number');
     }
 
     $series_id = intval($_POST['series_id']);
     $episode_number = intval($_POST['episode_number']);
-    $title = $conn->real_escape_string($_POST['title'] ?? 'الحلقة ' . $episode_number);
+    $title = $conn->real_escape_string($_POST['title'] ?? '');
     
     logActivity("المعطيات المستلمة:");
     logActivity("series_id: $series_id");
@@ -507,52 +521,53 @@ function uploadEpisode($conn) {
 
     if (!isset($_FILES['video'])) {
         logActivity("ERROR: No video file uploaded");
-        throw new Exception('لم يتم رفع ملف الفيديو');
+        throw new Exception('No video uploaded');
     }
     
     $video = $_FILES['video'];
     logActivity("معلومات ملف الفيديو:");
-    logActivity("Name: " . $video['name']);
-    logActivity("Size: " . $video['size']);
-    logActivity("Temp: " . $video['tmp_name']);
-    
+    logActivity(print_r($video, true));
     // بدء المعاملة
     $conn->autocommit(false);
+    $success = false;
+    $target_path = '';
+    $series_id = intval($_POST['series_id']);
     
     try {
-        // التحقق من صحة الفيديو فقط
+        $episode_number = intval($_POST['episode_number']);
+        $title = $conn->real_escape_string($_POST['title'] ?? '');
+
+        if (!isset($_FILES['video'])) throw new Exception('No video uploaded');
+        $video = $_FILES['video'];
+        
+        // التحقق من صحة الفيديو
         $video_type = strtolower(pathinfo($video['name'], PATHINFO_EXTENSION));
         $allowed = ['mp4', 'avi', 'mov', 'mkv', 'webm'];
-        
-        if (!in_array($video_type, $allowed)) {
-            throw new Exception('نوع الفيديو غير مدعوم: ' . $video_type);
-        }
-        
-        // زيادة الحد الأقصى للحجم إلى 2GB
-        if ($video['size'] > 2 * 1024 * 1024 * 1024) {
-            throw new Exception('حجم الفيديو يتجاوز 2GB');
-        }
+        if (!in_array($video_type, $allowed)) throw new Exception('Invalid video type');
+        if ($video['size'] > 500 * 1024 * 1024) throw new Exception('Video exceeds 500MB');
 
         $target_dir = "series_episodes/";
         if (!file_exists($target_dir)) {
             if (!mkdir($target_dir, 0755, true)) {
-                throw new Exception('فشل إنشاء مجلد الحلقات');
+                throw new Exception('Failed to create episodes directory');
             }
         }
 
-        // ✅ إزالة التحقق من وجود المسلسل - نرفع مباشرة
-        
+        // التأكد من وجود المسلسل
+        $stmt = $conn->prepare("SELECT name, image_path FROM series WHERE id = ?");
+        $stmt->bind_param("i", $series_id);
+        $stmt->execute();
+        $stmt->bind_result($series_name, $series_image);
+        if (!$stmt->fetch()) throw new Exception('Series not found');
+        $stmt->close();
+
         // التحقق من وجود الحلقة وحذفها إذا كانت موجودة
         $chk = $conn->prepare("SELECT id, video_path FROM episodes WHERE series_id = ? AND episode_number = ?");
-        if (!$chk) {
-            throw new Exception('خطأ في الاستعداد للاستعلام: ' . $conn->error);
-        }
         $chk->bind_param("ii", $series_id, $episode_number);
         $chk->execute();
         $chk->store_result();
         
         $old_video_path = '';
-        $old_id = null;
         if ($chk->num_rows > 0) {
             $chk->bind_result($old_id, $old_path);
             $chk->fetch();
@@ -560,14 +575,9 @@ function uploadEpisode($conn) {
             
             // حذف الحلقة القديمة من قاعدة البيانات
             $delete = $conn->prepare("DELETE FROM episodes WHERE id = ?");
-            if (!$delete) {
-                throw new Exception('خطأ في الاستعداد للاستعلام: ' . $conn->error);
-            }
             $delete->bind_param("i", $old_id);
             $delete->execute();
             $delete->close();
-            
-            logActivity("تم حذف الحلقة القديمة: $old_id");
         }
         $chk->close();
 
@@ -575,85 +585,63 @@ function uploadEpisode($conn) {
         $filename = "ep_{$series_id}_{$episode_number}_" . time() . '.' . $video_type;
         $target_path = $target_dir . $filename;
 
-        logActivity("محاولة نقل الملف إلى: $target_path");
-        
-        // ✅ رفع الملف مع الحفاظ على الاتصال
-        $upload_success = false;
-        
-        // للملفات الكبيرة نستخدم الرفع على أجزاء
-        if ($video['size'] > 50 * 1024 * 1024) {
-            $chunk_size = 2 * 1024 * 1024; // 2MB chunks
-            $src_handle = fopen($video['tmp_name'], 'rb');
-            $dest_handle = fopen($target_path, 'wb');
-            
-            if ($src_handle && $dest_handle) {
-                while (!feof($src_handle)) {
-                    $chunk = fread($src_handle, $chunk_size);
-                    if (fwrite($dest_handle, $chunk) === false) {
-                        break;
-                    }
-                    // إفراز buffer للحفاظ على الاتصال
-                    ob_flush();
-                    flush();
-                    usleep(10000); // 10ms delay لتقليل الحمل
-                }
-                fclose($src_handle);
-                fclose($dest_handle);
-                $upload_success = true;
-            }
-        } else {
-            $upload_success = move_uploaded_file($video['tmp_name'], $target_path);
-        }
-        
-        if ($upload_success) {
-            logActivity("تم نقل الملف بنجاح إلى: $target_path");
-            logActivity("حجم الملف: " . filesize($target_path) . " bytes");
-            
+        if (move_uploaded_file($video['tmp_name'], $target_path)) {
             // حذف الفيديو القديم إذا كان موجودًا
             if (!empty($old_video_path) && file_exists($target_dir . $old_video_path)) {
-                if (unlink($target_dir . $old_video_path)) {
-                    logActivity("تم حذف الفيديو القديم: $old_video_path");
-                }
+                @unlink($target_dir . $old_video_path);
             }
             
             // إدراج الحلقة الجديدة
             $insert = $conn->prepare("INSERT INTO episodes (series_id, title, episode_number, video_path) VALUES (?, ?, ?, ?)");
-            if (!$insert) {
-                throw new Exception('خطأ في الاستعداد للاستعلام: ' . $conn->error);
-            }
             $insert->bind_param("isis", $series_id, $title, $episode_number, $filename);
 
             if ($insert->execute()) {
-                logActivity("تم إدخال الحلقة في قاعدة البيانات، ID: " . $insert->insert_id);
-                
+                // إرسال إشعار
+               // $notificationTitle = "🎥 حلقة جديدة: {$series_name}";
+              //  $notificationBody = "الحلقة $episode_number: $title";
+
+              //  global $messaging;
+               // if ($messaging !== null) {
+                  ///  $message = CloudMessage::withTarget('topic', 'all')
+                      //  ->withNotification(Notification::create($notificationTitle, $notificationBody))
+                       // ->withData([
+                         //   'type' => 'new_episode',
+                         //   'series_id' => $series_id,
+                            //'episode_number' => $episode_number,
+                           // 'series_image' => $series_image
+                       // ]);
+                    
+                  //  try {
+                       /// $messaging->send($message);
+                       // logActivity("Notification sent for new episode: {$series_name} - Ep $episode_number");
+                  ///  } catch (Exception $e) {
+                       /// logError("Failed to send notification: " . $e->getMessage());
+                  ///  }
+               // }
+
                 $conn->commit();
-                logActivity("تم تأكيد المعاملة بنجاح");
-                
+                $success = true;
                 echo json_encode([
                     'status' => 'success',
-                    'message' => 'تم رفع الحلقة بنجاح',
-                    'file_name' => $filename,
-                    'episode_id' => $insert->insert_id
+                    'message' => 'Episode uploaded successfully',
+                    'file_name' => $filename
                 ]);
             } else {
-                throw new Exception('فشل إدخال البيانات في قاعدة البيانات: ' . $conn->error);
+                throw new Exception('Database insert failed');
             }
-            
-            $insert->close();
         } else {
-            $error = error_get_last();
-            throw new Exception('فشل نقل الملف: ' . ($error['message'] ?? 'Unknown error'));
+            throw new Exception('Failed to move uploaded file');
         }
     } catch (Exception $e) {
         $conn->rollback();
-        logError("Error in uploadEpisode: " . $e->getMessage());
         
         // حذف الملف الذي تم رفعه في حالة الفشل
         if (!empty($target_path) && file_exists($target_path)) {
             @unlink($target_path);
         }
         
-        throw new Exception('فشل رفع الحلقة: ' . $e->getMessage());
+        logError("Error in uploadEpisode: " . $e->getMessage());
+        throw $e;
     } finally {
         $conn->autocommit(true);
     }
@@ -662,51 +650,17 @@ function uploadEpisode($conn) {
 
 
 
-function New_Methods_uploadEpisode($conn) { 
-    if (!isset($_POST['series_id']) || !isset($_POST['episode_number'])) {
-        throw new Exception('يجب تحديد معرف المسلسل ورقم الحلقة');
-    }
 
-    $series_id = intval($_POST['series_id']);
-    $episode_number = intval($_POST['episode_number']);
-    $title = $conn->real_escape_string($_POST['title'] ?? 'الحلقة ' . $episode_number);
 
-    if (!isset($_FILES['video'])) {
-        throw new Exception('لم يتم رفع الفيديو');
-    }
 
-    $video = $_FILES['video'];
-    $video_type = strtolower(pathinfo($video['name'], PATHINFO_EXTENSION));
-    $allowed = ['mp4', 'avi', 'mov', 'mkv', 'webm'];
-    if (!in_array($video_type, $allowed)) {
-        throw new Exception('نوع الفيديو غير مدعوم: ' . $video_type);
-    }
 
-    $target_dir = "series_episodes/";
-    if (!file_exists($target_dir)) mkdir($target_dir, 0755, true);
 
-    $filename = "ep_{$series_id}_{$episode_number}_" . time() . '.' . $video_type;
-    $target_path = $target_dir . $filename;
 
-    // رفع الملف (يفترض أن الحلقة ≤ 100MB بعد التقطيع)
-    if (!move_uploaded_file($video['tmp_name'], $target_path)) {
-        throw new Exception("فشل رفع الفيديو");
-    }
-
-    // حفظ في قاعدة البيانات
-    $insert = $conn->prepare("INSERT INTO episodes (series_id, title, episode_number, video_path) VALUES (?, ?, ?, ?)");
-    $insert->bind_param("isis", $series_id, $title, $episode_number, $filename);
-
-    if ($insert->execute()) {
-        echo json_encode([
-            'status' => 'success',
-            'message' => 'تم رفع الحلقة بنجاح',
-            'file_name' => $filename,
-            'episode_id' => $insert->insert_id
-        ]);
-    } else {
-        throw new Exception('فشل إدخال البيانات: ' . $conn->error);
-    }
+// دالة مساعدة لتنسيق حجم الملف
+function formatBytes($size, $precision = 2) {
+    $base = log($size, 1024);
+    $suffixes = array('B', 'KB', 'MB', 'GB', 'TB');
+    return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
 }
 
 
@@ -746,6 +700,79 @@ function testNotification($conn) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
 }
+
+// دالة موثوقة لإرسال الإشعارات مع إعادة المحاولة
+function sendReliableNotification($messaging, $title, $body, $data, $imageUrl = null) {
+    $maxRetries = 3;
+    $retryDelay = 1; // ثانية واحدة بين المحاولات
+    
+    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        try {
+            $notification = \Kreait\Firebase\Messaging\Notification::create($title, $body);
+            
+            $androidConfig = [
+                'priority' => 'high',
+                'notification' => [
+                    'channel_id' => 'professional_series_channel',
+                    'color' => '#FF0000',
+                    'sound' => 'notification_sound',
+                    'visibility' => 'public',
+                    'icon' => 'ic_notification',
+                    'tag' => 'series_' . ($data['series_id'] ?? 'default'),
+                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
+                ]
+            ];
+            
+            if ($imageUrl) {
+                $androidConfig['notification']['image'] = $imageUrl;
+            }
+            
+            $apnsConfig = [
+                'payload' => [
+                    'aps' => [
+                        'alert' => [
+                            'title' => $title,
+                            'body' => $body
+                        ],
+                        'sound' => 'default',
+                        'mutable-content' => 1,
+                        'badge' => 1,
+                        'category' => 'series_notifications'
+                    ]
+                ]
+            ];
+            
+            if ($imageUrl) {
+                $apnsConfig['payload']['fcm_options']['image'] = $imageUrl;
+            }
+            
+            $message = \Kreait\Firebase\Messaging\CloudMessage::withTarget('topic', 'all')
+                ->withNotification($notification)
+                ->withData($data)
+                ->withAndroidConfig($androidConfig)
+                ->withApnsConfig($apnsConfig);
+            
+            $result = $messaging->send($message);
+            
+            logActivity("تم إرسال الإشعار بنجاح: $title (محاولة $attempt)");
+            return ['success' => true, 'result' => $result, 'attempts' => $attempt];
+            
+        } catch (Exception $e) {
+            logError("فشل إرسال الإشعار (محاولة $attempt): " . $e->getMessage());
+            
+            if ($attempt === $maxRetries) {
+                return ['success' => false, 'error' => $e->getMessage(), 'attempts' => $attempt];
+            }
+            
+            // انتظر قبل المحاولة التالية
+            sleep($retryDelay);
+            $retryDelay *= 2; // زيادة فترة الانتظار مع كل محاولة
+        }
+    }
+    
+    return ['success' => false, 'error' => 'فشل بعد جميع المحاولات', 'attempts' => $maxRetries];
+}
+
 
 
 
@@ -811,7 +838,7 @@ function createSeries($conn) {
         
         // الخطوة 1: إدراج المسلسل بصورة مؤقتة للحصول على الـ ID
         $temp_image_path = $conn->real_escape_string($original_image_path);
-        $insert_sql = "INSERT INTO series (name, image_path) VALUES (?, ?)";
+        $insert_sql = "INSERT INTO series (name, image_path, isFeatured) VALUES (?, ?, 0)";
         $insert_stmt = $conn->prepare($insert_sql);
         $insert_stmt->bind_param("ss", $name, $temp_image_path);
         
@@ -850,11 +877,11 @@ function createSeries($conn) {
             $success = true;
             
             // ========== إرسال الإشعار كما في صفحة HTML ==========
-            $base_url = "https://dramabox1.site/App";
+            $base_url = "https://dramaxbox.bbs.tr/App";
             $full_image_url = $base_url . "/series_images/" . $new_image_name;
             
             try {
-                // بيانات الإشعار بنفس شكل صفحة HTML
+                // بيانات الإشعار مع النظام الموثوق
                 $notificationData = [
                     'type' => 'new_series',
                     'series_id' => (string)$series_id,
@@ -865,53 +892,26 @@ function createSeries($conn) {
                     'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
                 ];
                 
-                // إنشاء الإشعار
-                $notification = \Kreait\Firebase\Messaging\Notification::create(
-                    '🎬 ' . $name,
-                    $series_description
+                // استخدام النظام الموثوق لإرسال الإشعار مع إعادة المحاولة
+                $notificationResult = sendReliableNotification(
+                    $messaging, 
+                    '🎬 ' . $name, 
+                    $series_description, 
+                    $notificationData, 
+                    $full_image_url
                 );
                 
-                // تكوين الرسالة بنفس إعدادات صفحة HTML
-                $message = \Kreait\Firebase\Messaging\CloudMessage::withTarget('topic', 'all')
-                    ->withNotification($notification)
-                    ->withData($notificationData)
-                    ->withAndroidConfig([
-                        'priority' => 'high',
-                        'notification' => [
-                            'channel_id' => 'professional_series_channel',
-                            'color' => '#FF0000',
-                            'sound' => 'notification_sound',
-                            'visibility' => 'public',
-                            'icon' => 'ic_notification',
-                            'tag' => 'series_' . $series_id,
-                            'image' => $full_image_url
-                        ]
-                    ])
-                    ->withApnsConfig([
-                        'payload' => [
-                            'aps' => [
-                                'alert' => [
-                                    'title' => '🎬 ' . $name,
-                                    'body' => $series_description
-                                ],
-                                'sound' => 'default',
-                                'mutable-content' => 1,
-                                'badge' => 1,
-                                'category' => 'series_notifications'
-                            ],
-                            'fcm_options' => [
-                                'image' => $full_image_url
-                            ]
-                        ]
-                    ]);
-                
-                // إرسال الإشعار
-                $result = $messaging->send($message);
-                
-                logActivity("تم إرسال إشعار مسلسل جديد: " . $name . " (ID: " . $series_id . ")");
+                if ($notificationResult['success']) {
+                    logActivity("تم إرسال إشعار مسلسل جديد بنجاح: " . $name . " (محاولات: " . $notificationResult['attempts'] . ")");
+                    $notification_sent = true;
+                } else {
+                    logError("فشل إرسال إشعار مسلسل جديد: " . $notificationResult['error'] . " (محاولات: " . $notificationResult['attempts'] . ")");
+                    $notification_sent = false;
+                }
                 
             } catch (Exception $e) {
-                logError("فشل إرسال الإشعار: " . $e->getMessage());
+                logError("خطأ في نظام الإشعارات: " . $e->getMessage());
+                $notification_sent = false;
                 // لا نوقف العملية إذا فشل الإشعار، نستمر لأن المسلسل تم إنشاؤه بنجاح
             }
             // ========== نهاية جزء الإشعارات ==========
@@ -938,8 +938,9 @@ function createSeries($conn) {
                 'name' => $name,
                 'image_path' => $new_image_path,
                 'replaced_old' => $replace_existing,
-                'notification_sent' => isset($result) ? true : false,
-                'notification_message' => $series_description
+                'notification_sent' => isset($notification_sent) ? $notification_sent : false,
+                'notification_message' => $series_description,
+                'notification_attempts' => isset($notificationResult) ? $notificationResult['attempts'] : 0
             ]);
         } else {
             throw new Exception('Error creating series: ' . $conn->error);
@@ -1027,25 +1028,62 @@ function getSeries($conn) {
 function manageAdmobSettings($conn) {
     $input = json_decode(file_get_contents('php://input'), true);
     $action = $input['action'] ?? '';
+    $app = $input['app'] ?? 'main';
     
     if ($action === 'get') {
-        $result = $conn->query("SELECT * FROM admob_settings LIMIT 1");
-        $settings = $result->fetch_assoc();
-        echo json_encode(['status' => 'success', 'data' => $settings]);
+        // قائمة الحقول المدعومة - نفس الأسماء الموجودة في قاعدة البيانات
+        $supportedFields = [
+            'app_id', 'banner', 'interstitial',
+            'rewarded1', 'rewarded2', 'rewarded3', 
+            'rewarded4', 'rewarded5', 'rewarded6'
+        ];
+        
+        // إذا تم تمرير قائمة بالحقول المطلوبة، استخدمها
+        $requestedFields = $input['fields'] ?? $supportedFields;
+        $fields = array_intersect($requestedFields, $supportedFields);
+        
+        // تحديد اسم الجدول الصحيح بناءً على التطبيق
+        $tableName = 'admob_settings'; // التطبيق الأساسي
+        if ($app === 'mohamed') {
+            $tableName = 'Muhammed8080admob_settings';
+        } elseif ($app === 'rivo') {
+            $tableName = 'Revo_Shorts_admob';
+        }
+        
+        $result = $conn->query("SELECT * FROM $tableName LIMIT 1");
+        $allSettings = $result->fetch_assoc() ?: [];
+        
+        // فلترة النتائج للحصول على الحقول المطلوبة فقط
+        $filteredSettings = [];
+        foreach ($fields as $field) {
+            $filteredSettings[$field] = $allSettings[$field] ?? '';
+        }
+        
+        echo json_encode(['status' => 'success', 'data' => $filteredSettings]);
         return;
     }
     
     if ($action === 'update') {
-        $fields = [
-            'rewarded1', 'rewarded2', 'rewarded3', 'rewarded4', 
-            'rewarded5', 'rewarded6', 'banner', 'interstitial', 'app_id'
+        // تحديد اسم الجدول الصحيح بناءً على التطبيق
+        $tableName = 'admob_settings'; // التطبيق الأساسي
+        if ($app === 'mohamed') {
+            $tableName = 'Muhammed8080admob_settings';
+        } elseif ($app === 'rivo') {
+            $tableName = 'Revo_Shorts_admob';
+        }
+        
+        // نفس أسماء الحقول الموجودة في قاعدة البيانات
+        $supportedFields = [
+            'app_id', 'banner', 'interstitial',
+            'rewarded1', 'rewarded2', 'rewarded3', 
+            'rewarded4', 'rewarded5', 'rewarded6'
         ];
         
         $updateFields = [];
         $params = [];
         $types = '';
         
-        foreach ($fields as $field) {
+        foreach ($supportedFields as $field) {
             if (isset($input[$field])) {
                 $updateFields[] = "$field = ?";
                 $params[] = $input[$field];
@@ -1054,16 +1092,20 @@ function manageAdmobSettings($conn) {
         }
         
         if (!empty($updateFields)) {
-            $sql = "UPDATE admob_settings SET " . implode(', ', $updateFields) . " WHERE id = 1";
+            $sql = "UPDATE $tableName SET " . implode(', ', $updateFields) . " WHERE id = 1";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param($types, ...$params);
+            if ($types && $params) {
+                $stmt->bind_param($types, ...$params);
+            }
             
             if ($stmt->execute()) {
-                echo json_encode(['status' => 'success', 'message' => 'تم تحديث إعدادات AdMob']);
+                echo json_encode(['status' => 'success', 'message' => "تم تحديث إعدادات AdMob لتطبيق $app"]);
             } else {
                 echo json_encode(['status' => 'error', 'message' => 'فشل التحديث']);
             }
             $stmt->close();
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'لا توجد حقول للتحديث']);
         }
         return;
     }
@@ -1476,48 +1518,102 @@ function manageVipPackages($conn) {
 function manageAppSettings($conn) {
     $input = json_decode(file_get_contents('php://input'), true);
     $action = $input['action'] ?? '';
+    $app = $input['app'] ?? 'main';
     
     if ($action === 'get') {
-        $result = $conn->query("SELECT * FROM system_settings LIMIT 1");
-        $settings = $result->fetch_assoc();
+        // تحديد اسم الجدول الصحيح بناءً على التطبيق
+        $tableName = 'app_config'; // التطبيق الأساسي
+        if ($app === 'mohamed') {
+            $tableName = 'Muhammed8080app_config';
+        } elseif ($app === 'rivo') {
+            $tableName = 'Revo_Shorts';
+        }
         
-        $appMode = $conn->query("SELECT value FROM app_config WHERE config_key = 'app_mode' LIMIT 1");
-        $settings['app_mode'] = $appMode->fetch_assoc()['value'] ?? 1;
+        // جلب جميع الإعدادات من الجدول المناسب
+        $result = $conn->query("SELECT * FROM $tableName");
+        $settings = [];
         
-        echo json_encode(['status' => 'success', 'data' => $settings]);
+        while ($row = $result->fetch_assoc()) {
+            if (isset($row['config_key']) && isset($row['value'])) {
+                $settings[$row['config_key']] = $row['value'];
+            }
+        }
+        
+        echo json_encode(['status' => 'success', 'data' => $settings, 'app' => $app]);
         return;
     }
     
     if ($action === 'update') {
-        $fields = [
-            'site_name', 'site_email', 'items_per_page', 'episode_price', 
-            'site_description', 'app_mode'
-        ];
+        // تحديد اسم الجدول الصحيح بناءً على التطبيق
+        $tableName = 'app_config'; // التطبيق الأساسي
+        if ($app === 'mohamed') {
+            $tableName = 'Muhammed8080app_config';
+        } elseif ($app === 'rivo') {
+            $tableName = 'Revo_Shorts';
+        }
         
         $conn->autocommit(false);
         try {
-            foreach ($fields as $field) {
-                if (isset($input[$field])) {
-                    if ($field === 'app_mode') {
-                        $stmt = $conn->prepare("UPDATE app_config SET value = ? WHERE config_key = 'app_mode'");
-                        $stmt->bind_param("i", $input[$field]);
-                    } else {
-                        $stmt = $conn->prepare("UPDATE system_settings SET $field = ? WHERE id = 1");
-                        $stmt->bind_param("s", $input[$field]);
-                    }
-                    $stmt->execute();
-                    $stmt->close();
+            foreach ($input as $key => $value) {
+                if ($key === 'action' || $key === 'app') continue; // تجاهل هذه المفاتيح
+                
+                // التحقق من وجود الإعداد وتحديثه أو إنشاؤه
+                $checkStmt = $conn->prepare("SELECT COUNT(*) as count FROM $tableName WHERE config_key = ?");
+                $checkStmt->bind_param("s", $key);
+                $checkStmt->execute();
+                $result = $checkStmt->get_result();
+                $exists = $result->fetch_assoc()['count'] > 0;
+                $checkStmt->close();
+                
+                if ($exists) {
+                    // تحديث الإعداد الموجود
+                    $stmt = $conn->prepare("UPDATE $tableName SET value = ? WHERE config_key = ?");
+                    $stmt->bind_param("ss", $value, $key);
+                } else {
+                    // إنشاء إعداد جديد
+                    $stmt = $conn->prepare("INSERT INTO $tableName (config_key, value) VALUES (?, ?)");
+                    $stmt->bind_param("ss", $key, $value);
                 }
+                
+                $stmt->execute();
+                $stmt->close();
             }
             
             $conn->commit();
-            echo json_encode(['status' => 'success', 'message' => 'تم تحديث الإعدادات بنجاح']);
+            echo json_encode(['status' => 'success', 'message' => "تم تحديث إعدادات التطبيق $app بنجاح"]);
         } catch (Exception $e) {
             $conn->rollback();
             echo json_encode(['status' => 'error', 'message' => 'فشل التحديث: ' . $e->getMessage()]);
         } finally {
             $conn->autocommit(true);
         }
+        return;
+    }
+    
+    if ($action === 'get_all') {
+        // إرجاع إعدادات جميع التطبيقات
+        $allSettings = [];
+        
+        $apps = [
+            'main' => 'app_config',
+            'mohamed' => 'Muhammed8080app_config', 
+            'rivo' => 'Revo_Shorts'
+        ];
+        
+        foreach ($apps as $appKey => $table) {
+            $result = $conn->query("SELECT * FROM $table");
+            $settings = [];
+            
+            while ($row = $result->fetch_assoc()) {
+                if (isset($row['config_key']) && isset($row['value'])) {
+                    $settings[$row['config_key']] = $row['value'];
+                }
+            }
+            
+            $allSettings[$appKey] = $settings;
+        }
+        
+        echo json_encode(['status' => 'success', 'data' => $allSettings]);
         return;
     }
 }
@@ -1552,4 +1648,333 @@ function getDashboardStats($conn) {
     $stats['today_views'] = $result->fetch_assoc()['count'];
     
     echo json_encode(['status' => 'success', 'data' => $stats]);
+}
+
+// ====================== MULTI-APP CONFIGURATION FUNCTIONS ======================
+
+// جلب إعدادات التطبيق حسب النوع
+function getAppConfig($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $app_key = $input['app'] ?? 'main';
+    
+    try {
+        // تحديد الجدول والمعرف حسب نوع التطبيق
+        $table_suffix = '';
+        switch ($app_key) {
+            case 'mohamed':
+                $table_suffix = '_mohamed';
+                break;
+            case 'rivo':
+                $table_suffix = '_rivo';
+                break;
+            case 'main':
+            default:
+                $table_suffix = '';
+                break;
+        }
+        
+        // البحث في جدول الإعدادات المخصص أو الأساسي
+        $sql = "SELECT * FROM app_settings" . $table_suffix . " LIMIT 1";
+        $result = $conn->query($sql);
+        
+        if (!$result) {
+            // إذا لم يجد الجدول، إنشاء البيانات الافتراضية
+            $default_settings = [
+                'app_mode' => 1,
+                'free_mode_ads' => 1,
+                'site_name' => _getDefaultSiteNameForApp($app_key),
+                'site_email' => 'admin@dramixshrt.com',
+                'site_description' => _getDefaultDescriptionForApp($app_key),
+                'items_per_page' => 20,
+                'episode_price' => 10
+            ];
+            echo json_encode(['status' => 'success', 'data' => $default_settings]);
+        } else {
+            $settings = $result->fetch_assoc();
+            if (!$settings) {
+                $settings = [
+                    'app_mode' => 1,
+                    'free_mode_ads' => 1,
+                    'site_name' => _getDefaultSiteNameForApp($app_key),
+                    'site_email' => 'admin@dramixshrt.com',
+                    'site_description' => _getDefaultDescriptionForApp($app_key),
+                    'items_per_page' => 20,
+                    'episode_price' => 10
+                ];
+            }
+            echo json_encode(['status' => 'success', 'data' => $settings]);
+        }
+    } catch (Exception $e) {
+        logError("getAppConfig Error: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'خطأ في جلب إعدادات التطبيق']);
+    }
+}
+
+// تحديث إعدادات التطبيق حسب النوع
+function updateAppConfig($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $app_key = $input['app'] ?? 'main';
+    
+    // إزالة مفتاح app من البيانات
+    unset($input['app']);
+    
+    try {
+        $table_suffix = '';
+        switch ($app_key) {
+            case 'mohamed':
+                $table_suffix = '_mohamed';
+                break;
+            case 'rivo':
+                $table_suffix = '_rivo';
+                break;
+            case 'main':
+            default:
+                $table_suffix = '';
+                break;
+        }
+        
+        $table_name = "app_settings" . $table_suffix;
+        
+        // التحقق من وجود الجدول وإنشاؤه إذا لم يكن موجوداً
+        $create_table_sql = "CREATE TABLE IF NOT EXISTS `" . $table_name . "` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `app_mode` tinyint(1) DEFAULT 1,
+            `free_mode_ads` tinyint(1) DEFAULT 1,
+            `site_name` varchar(255) DEFAULT '',
+            `site_email` varchar(255) DEFAULT 'admin@dramixshrt.com',
+            `site_description` text,
+            `items_per_page` int(11) DEFAULT 20,
+            `episode_price` int(11) DEFAULT 10,
+            `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+        
+        $conn->query($create_table_sql);
+        
+        // التحقق من وجود سجل وإدراجه إذا لم يكن موجوداً
+        $check_sql = "SELECT id FROM `" . $table_name . "` LIMIT 1";
+        $result = $conn->query($check_sql);
+        
+        if (!$result || $result->num_rows == 0) {
+            $default_name = _getDefaultSiteNameForApp($app_key);
+            $default_desc = _getDefaultDescriptionForApp($app_key);
+            $insert_sql = "INSERT INTO `" . $table_name . "` 
+                          (app_mode, free_mode_ads, site_name, site_email, site_description, items_per_page, episode_price) 
+                          VALUES (1, 1, ?, 'admin@dramixshrt.com', ?, 20, 10)";
+            $stmt = $conn->prepare($insert_sql);
+            $stmt->bind_param("ss", $default_name, $default_desc);
+            $stmt->execute();
+            $stmt->close();
+        }
+        
+        // تحديث الإعدادات
+        $fields = [];
+        $params = [];
+        $types = '';
+        
+        $allowed_fields = ['app_mode', 'free_mode_ads', 'site_name', 'site_email', 'site_description', 'items_per_page', 'episode_price'];
+        
+        foreach ($allowed_fields as $field) {
+            if (isset($input[$field])) {
+                $fields[] = "`$field` = ?";
+                $params[] = $input[$field];
+                $types .= is_int($input[$field]) ? 'i' : 's';
+            }
+        }
+        
+        if (!empty($fields)) {
+            $sql = "UPDATE `" . $table_name . "` SET " . implode(', ', $fields) . " WHERE id = 1";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'تم تحديث إعدادات التطبيق بنجاح']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'فشل في التحديث']);
+            }
+            $stmt->close();
+        } else {
+            echo json_encode(['status' => 'info', 'message' => 'لم يتم تحديد أي حقول للتحديث']);
+        }
+        
+    } catch (Exception $e) {
+        logError("updateAppConfig Error: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'خطأ في تحديث إعدادات التطبيق']);
+    }
+}
+
+// جلب إعدادات AdMob حسب التطبيق
+function getAdmobConfig($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $app_key = $input['app'] ?? 'main';
+    
+    try {
+        $table_suffix = '';
+        switch ($app_key) {
+            case 'mohamed':
+                $table_suffix = '_mohamed';
+                break;
+            case 'rivo':
+                $table_suffix = '_rivo';
+                break;
+            case 'main':
+            default:
+                $table_suffix = '';
+                break;
+        }
+        
+        $table_name = "admob_settings" . $table_suffix;
+        $sql = "SELECT * FROM `" . $table_name . "` LIMIT 1";
+        $result = $conn->query($sql);
+        
+        if (!$result) {
+            // إرجاع الإعدادات الافتراضية إذا لم يجد الجدول
+            $default_settings = [
+                'app_id' => '',
+                'banner' => '',
+                'interstitial' => '',
+                'rewarded1' => '',
+                'rewarded2' => '',
+                'rewarded3' => '',
+                'rewarded4' => '',
+                'rewarded5' => '',
+                'rewarded6' => ''
+            ];
+            echo json_encode(['status' => 'success', 'data' => $default_settings]);
+        } else {
+            $settings = $result->fetch_assoc();
+            if (!$settings) {
+                $settings = [
+                    'app_id' => '',
+                    'banner' => '',
+                    'interstitial' => '',
+                    'rewarded1' => '',
+                    'rewarded2' => '',
+                    'rewarded3' => '',
+                    'rewarded4' => '',
+                    'rewarded5' => '',
+                    'rewarded6' => ''
+                ];
+            }
+            echo json_encode(['status' => 'success', 'data' => $settings]);
+        }
+    } catch (Exception $e) {
+        logError("getAdmobConfig Error: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'خطأ في جلب إعدادات AdMob']);
+    }
+}
+
+// تحديث إعدادات AdMob حسب التطبيق
+function updateAdmobConfig($conn) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $app_key = $input['app'] ?? 'main';
+    
+    // إزالة مفتاح app من البيانات
+    unset($input['app']);
+    
+    try {
+        $table_suffix = '';
+        switch ($app_key) {
+            case 'mohamed':
+                $table_suffix = '_mohamed';
+                break;
+            case 'rivo':
+                $table_suffix = '_rivo';
+                break;
+            case 'main':
+            default:
+                $table_suffix = '';
+                break;
+        }
+        
+        $table_name = "admob_settings" . $table_suffix;
+        
+        // إنشاء الجدول إذا لم يكن موجوداً
+        $create_table_sql = "CREATE TABLE IF NOT EXISTS `" . $table_name . "` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `app_id` varchar(255) DEFAULT '',
+            `banner` varchar(255) DEFAULT '',
+            `interstitial` varchar(255) DEFAULT '',
+            `rewarded1` varchar(255) DEFAULT '',
+            `rewarded2` varchar(255) DEFAULT '',
+            `rewarded3` varchar(255) DEFAULT '',
+            `rewarded4` varchar(255) DEFAULT '',
+            `rewarded5` varchar(255) DEFAULT '',
+            `rewarded6` varchar(255) DEFAULT '',
+            `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+        
+        $conn->query($create_table_sql);
+        
+        // التحقق من وجود سجل وإدراجه إذا لم يكن موجوداً
+        $check_sql = "SELECT id FROM `" . $table_name . "` LIMIT 1";
+        $result = $conn->query($check_sql);
+        
+        if (!$result || $result->num_rows == 0) {
+            $insert_sql = "INSERT INTO `" . $table_name . "` 
+                          (app_id, banner, interstitial, rewarded1, rewarded2, rewarded3, rewarded4, rewarded5, rewarded6) 
+                          VALUES ('', '', '', '', '', '', '', '', '')";
+            $conn->query($insert_sql);
+        }
+        
+        // تحديث الإعدادات
+        $fields = [];
+        $params = [];
+        $types = '';
+        
+        $allowed_fields = ['app_id', 'banner', 'interstitial', 'rewarded1', 'rewarded2', 'rewarded3', 'rewarded4', 'rewarded5', 'rewarded6'];
+        
+        foreach ($allowed_fields as $field) {
+            if (isset($input[$field])) {
+                $fields[] = "`$field` = ?";
+                $params[] = $input[$field];
+                $types .= 's';
+            }
+        }
+        
+        if (!empty($fields)) {
+            $sql = "UPDATE `" . $table_name . "` SET " . implode(', ', $fields) . " WHERE id = 1";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'تم تحديث إعدادات AdMob بنجاح']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'فشل في التحديث']);
+            }
+            $stmt->close();
+        } else {
+            echo json_encode(['status' => 'info', 'message' => 'لم يتم تحديد أي حقول للتحديث']);
+        }
+        
+    } catch (Exception $e) {
+        logError("updateAdmobConfig Error: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'خطأ في تحديث إعدادات AdMob']);
+    }
+}
+
+// وظائف مساعدة للحصول على الأسماء والأوصاف الافتراضية
+function _getDefaultSiteNameForApp($app_key) {
+    switch ($app_key) {
+        case 'mohamed':
+            return 'تطبيق محمد';
+        case 'rivo':
+            return 'ريفو شورت';
+        case 'main':
+        default:
+            return 'DramaXBox';
+    }
+}
+
+function _getDefaultDescriptionForApp($app_key) {
+    switch ($app_key) {
+        case 'mohamed':
+            return 'تطبيق محمد للمسلسلات والأفلام العربية والأجنبية';
+        case 'rivo':
+            return 'ريفو شورت - أفضل منصة للفيديوهات القصيرة والمحتوى الترفيهي';
+        case 'main':
+        default:
+            return 'DramaXBox - منصة المسلسلات المتقدمة للمحتوى العربي والعالمي';
+    }
 }

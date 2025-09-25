@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Sep 25, 2025 at 01:00 PM
+-- Generation Time: Sep 25, 2025 at 09:51 PM
 -- Server version: 10.11.9-MariaDB
 -- PHP Version: 8.3.19
 
@@ -75,6 +75,60 @@ INSERT INTO `admob_settings` (`id`, `rewarded1`, `rewarded2`, `rewarded3`, `rewa
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `admob_settings_mohamed`
+--
+
+CREATE TABLE `admob_settings_mohamed` (
+  `id` int(11) NOT NULL,
+  `app_id` varchar(255) DEFAULT '',
+  `banner` varchar(255) DEFAULT '',
+  `interstitial` varchar(255) DEFAULT '',
+  `rewarded1` varchar(255) DEFAULT '',
+  `rewarded2` varchar(255) DEFAULT '',
+  `rewarded3` varchar(255) DEFAULT '',
+  `rewarded4` varchar(255) DEFAULT '',
+  `rewarded5` varchar(255) DEFAULT '',
+  `rewarded6` varchar(255) DEFAULT '',
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `admob_settings_mohamed`
+--
+
+INSERT INTO `admob_settings_mohamed` (`id`, `app_id`, `banner`, `interstitial`, `rewarded1`, `rewarded2`, `rewarded3`, `rewarded4`, `rewarded5`, `rewarded6`, `updated_at`) VALUES
+(1, '', '', '', '', '', '', '', '', '', '2025-09-25 18:34:43');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `admob_settings_rivo`
+--
+
+CREATE TABLE `admob_settings_rivo` (
+  `id` int(11) NOT NULL,
+  `app_id` varchar(255) DEFAULT '',
+  `banner` varchar(255) DEFAULT '',
+  `interstitial` varchar(255) DEFAULT '',
+  `rewarded1` varchar(255) DEFAULT '',
+  `rewarded2` varchar(255) DEFAULT '',
+  `rewarded3` varchar(255) DEFAULT '',
+  `rewarded4` varchar(255) DEFAULT '',
+  `rewarded5` varchar(255) DEFAULT '',
+  `rewarded6` varchar(255) DEFAULT '',
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `admob_settings_rivo`
+--
+
+INSERT INTO `admob_settings_rivo` (`id`, `app_id`, `banner`, `interstitial`, `rewarded1`, `rewarded2`, `rewarded3`, `rewarded4`, `rewarded5`, `rewarded6`, `updated_at`) VALUES
+(1, '', '', '', '', '', '', '', '', '', '2025-09-25 18:34:43');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `app_config`
 --
 
@@ -91,6 +145,81 @@ CREATE TABLE `app_config` (
 INSERT INTO `app_config` (`id`, `config_key`, `value`) VALUES
 (1, 'app_mode', 1),
 (2, 'free_mode_ads', 1);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `app_settings`
+--
+
+CREATE TABLE `app_settings` (
+  `id` int(11) NOT NULL,
+  `app_mode` tinyint(1) DEFAULT 1,
+  `free_mode_ads` tinyint(1) DEFAULT 1,
+  `site_name` varchar(255) DEFAULT 'DramaXBox',
+  `site_email` varchar(255) DEFAULT 'admin@dramixshrt.com',
+  `site_description` text DEFAULT 'DramaXBox - منصة المسلسلات المتقدمة للمحتوى العربي والعالمي',
+  `items_per_page` int(11) DEFAULT 20,
+  `episode_price` int(11) DEFAULT 10,
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `app_settings`
+--
+
+INSERT INTO `app_settings` (`id`, `app_mode`, `free_mode_ads`, `site_name`, `site_email`, `site_description`, `items_per_page`, `episode_price`, `updated_at`) VALUES
+(1, 0, 0, 'تطبيق محمد', 'admin@dramixshrt.com', 'تطبيق محمد للمسلسلات والأفلام العربية والأجنبية', 20, 10, '2025-09-25 18:44:32');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `app_settings_mohamed`
+--
+
+CREATE TABLE `app_settings_mohamed` (
+  `id` int(11) NOT NULL,
+  `app_mode` tinyint(1) DEFAULT 1,
+  `free_mode_ads` tinyint(1) DEFAULT 1,
+  `site_name` varchar(255) DEFAULT 'تطبيق محمد',
+  `site_email` varchar(255) DEFAULT 'admin@dramixshrt.com',
+  `site_description` text DEFAULT 'تطبيق محمد للمسلسلات والأفلام العربية والأجنبية',
+  `items_per_page` int(11) DEFAULT 20,
+  `episode_price` int(11) DEFAULT 10,
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `app_settings_mohamed`
+--
+
+INSERT INTO `app_settings_mohamed` (`id`, `app_mode`, `free_mode_ads`, `site_name`, `site_email`, `site_description`, `items_per_page`, `episode_price`, `updated_at`) VALUES
+(1, 1, 1, 'تطبيق محمد', 'admin@dramixshrt.com', 'تطبيق محمد للمسلسلات والأفلام العربية والأجنبية', 20, 10, '2025-09-25 18:34:43');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `app_settings_rivo`
+--
+
+CREATE TABLE `app_settings_rivo` (
+  `id` int(11) NOT NULL,
+  `app_mode` tinyint(1) DEFAULT 1,
+  `free_mode_ads` tinyint(1) DEFAULT 1,
+  `site_name` varchar(255) DEFAULT 'ريفو شورت',
+  `site_email` varchar(255) DEFAULT 'admin@dramixshrt.com',
+  `site_description` text DEFAULT 'ريفو شورت - أفضل منصة للفيديوهات القصيرة والمحتوى الترفيهي',
+  `items_per_page` int(11) DEFAULT 20,
+  `episode_price` int(11) DEFAULT 10,
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `app_settings_rivo`
+--
+
+INSERT INTO `app_settings_rivo` (`id`, `app_mode`, `free_mode_ads`, `site_name`, `site_email`, `site_description`, `items_per_page`, `episode_price`, `updated_at`) VALUES
+(1, 1, 1, 'ريفو شورت', 'admin@dramixshrt.com', 'ريفو شورت - أفضل منصة للفيديوهات القصيرة والمحتوى الترفيهي', 20, 10, '2025-09-25 18:34:43');
 
 -- --------------------------------------------------------
 
@@ -395,9 +524,9 @@ INSERT INTO `episodes` (`id`, `series_id`, `title`, `description`, `episode_numb
 (66, 35, 'نور الحريري، القبضة التي لا تُقهر - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_35_2_1753286589.mp4', '2025-07-23 16:03:09', 0, 0, 0, 39),
 (67, 35, 'نور الحريري، القبضة التي لا تُقهر - الحلقة 3', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 3, 'ep_35_3_1753286608.mp4', '2025-07-23 16:03:28', 0, 0, 0, 39),
 (95, 39, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_39_1_1753330315.mp4', '2025-07-24 04:11:55', 0, 0, 0, 39),
-(96, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_40_1_1753330808.mp4', '2025-07-24 04:20:08', 0, 7, 27, 39),
-(97, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_40_2_1753330833.mp4', '2025-07-24 04:20:33', 0, 3, 21, 39),
-(98, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 3', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 3, 'ep_40_3_1753330862.mp4', '2025-07-24 04:21:02', 0, 3, 15, 39),
+(96, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_40_1_1753330808.mp4', '2025-07-24 04:20:08', 0, 7, 28, 39),
+(97, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_40_2_1753330833.mp4', '2025-07-24 04:20:33', 0, 3, 22, 39),
+(98, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 3', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 3, 'ep_40_3_1753330862.mp4', '2025-07-24 04:21:02', 0, 3, 16, 39),
 (99, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 4', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 4, 'ep_40_4_1753330892.mp4', '2025-07-24 04:21:32', 0, 3, 13, 39),
 (100, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 5', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 5, 'ep_40_5_1753330915.mp4', '2025-07-24 04:21:55', 0, 2, 11, 39),
 (101, 40, 'النمر الرابض والتنين الخفي اسطورة تشو في - الحلقة 6', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 6, 'ep_40_6_1753330939.mp4', '2025-07-24 04:22:19', 0, 2, 9, 39),
@@ -2558,7 +2687,7 @@ INSERT INTO `episodes` (`id`, `series_id`, `title`, `description`, `episode_numb
 (3399, 226, 'الشاب الفقير رفض اهل العروس - الحلقة 66', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 66, 'ep_226_66_1756327916.mp4', '2025-08-27 20:52:02', 0, 0, 0, 39),
 (3400, 226, 'الشاب الفقير رفض اهل العروس - الحلقة 67', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 67, 'ep_226_67_1756327942.mp4', '2025-08-27 20:52:27', 0, 0, 0, 39),
 (3401, 226, 'الشاب الفقير رفض اهل العروس - الحلقة 68', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 68, 'ep_226_68_1756327958.mp4', '2025-08-27 20:52:43', 0, 0, 0, 39),
-(3402, 227, 'بائع الارز المقلي  - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_227_1_1756328426.mp4', '2025-08-27 21:00:32', 0, 3, 49, 39),
+(3402, 227, 'بائع الارز المقلي  - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_227_1_1756328426.mp4', '2025-08-27 21:00:32', 0, 3, 50, 39),
 (3403, 227, 'بائع الارز المقلي  - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_227_2_1756328447.mp4', '2025-08-27 21:00:52', 0, 1, 15, 39),
 (3404, 227, 'بائع الارز المقلي  - الحلقة 3', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 3, 'ep_227_3_1756328467.mp4', '2025-08-27 21:01:13', 0, 1, 14, 39),
 (3405, 227, 'بائع الارز المقلي  - الحلقة 4', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 4, 'ep_227_4_1756328490.mp4', '2025-08-27 21:01:36', 0, 0, 9, 39),
@@ -2624,8 +2753,8 @@ INSERT INTO `episodes` (`id`, `series_id`, `title`, `description`, `episode_numb
 (3464, 227, 'بائع الارز المقلي  - الحلقة 63', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 63, 'ep_227_63_1756329689.mp4', '2025-08-27 21:21:34', 0, 0, 0, 39),
 (3465, 227, 'بائع الارز المقلي  - الحلقة 64', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 64, 'ep_227_64_1756329709.mp4', '2025-08-27 21:21:55', 0, 0, 0, 39),
 (3466, 227, 'بائع الارز المقلي  - الحلقة 65', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 65, 'ep_227_65_1756329721.mp4', '2025-08-27 21:22:04', 0, 0, 0, 39),
-(3468, 229, 'الملك الخالد - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_229_1_1756354261.mp4', '2025-08-28 04:11:07', 0, 3, 60, 39),
-(3469, 229, 'الملك الخالد - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_229_2_1756354280.mp4', '2025-08-28 04:11:26', 0, 2, 18, 39),
+(3468, 229, 'الملك الخالد - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_229_1_1756354261.mp4', '2025-08-28 04:11:07', 0, 3, 62, 39),
+(3469, 229, 'الملك الخالد - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_229_2_1756354280.mp4', '2025-08-28 04:11:26', 0, 2, 19, 39),
 (3470, 229, 'الملك الخالد - الحلقة 3', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 3, 'ep_229_3_1756354296.mp4', '2025-08-28 04:11:42', 0, 3, 14, 39),
 (3471, 229, 'الملك الخالد - الحلقة 4', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 4, 'ep_229_4_1756354317.mp4', '2025-08-28 04:12:02', 0, 0, 7, 39),
 (3472, 229, 'الملك الخالد - الحلقة 5', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 5, 'ep_229_5_1756354346.mp4', '2025-08-28 04:12:32', 0, 1, 7, 39),
@@ -2695,7 +2824,7 @@ INSERT INTO `episodes` (`id`, `series_id`, `title`, `description`, `episode_numb
 (3536, 229, 'الملك الخالد - الحلقة 69', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 69, 'ep_229_69_1756355473.mp4', '2025-08-28 04:31:19', 0, 0, 0, 39),
 (3537, 229, 'الملك الخالد - الحلقة 70', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 70, 'ep_229_70_1756355494.mp4', '2025-08-28 04:31:39', 0, 0, 0, 39),
 (3538, 229, 'الملك الخالد - الحلقة 71', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 71, 'ep_229_71_1756355512.mp4', '2025-08-28 04:31:57', 0, 0, 0, 39),
-(3539, 230, 'العم وقع في حبي - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_230_1_1756497864.mp4', '2025-08-29 20:04:29', 0, 4, 68, 39),
+(3539, 230, 'العم وقع في حبي - الحلقة 1', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_230_1_1756497864.mp4', '2025-08-29 20:04:29', 0, 4, 69, 39),
 (3540, 230, 'العم وقع في حبي - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_230_2_1756497917.mp4', '2025-08-29 20:05:23', 0, 0, 20, 39),
 (3541, 230, 'العم وقع في حبي - الحلقة 3', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 3, 'ep_230_3_1756497962.mp4', '2025-08-29 20:06:07', 0, 1, 14, 39),
 (3542, 230, 'العم وقع في حبي - الحلقة 4', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 4, 'ep_230_4_1756498004.mp4', '2025-08-29 20:06:50', 0, 0, 13, 39),
@@ -2820,7 +2949,7 @@ INSERT INTO `episodes` (`id`, `series_id`, `title`, `description`, `episode_numb
 (3690, 233, 'الام الغامضة والطفل العبقري - الحلقة 76', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 76, 'ep_233_76_1756540991.mp4', '2025-08-30 08:03:17', 0, 0, 0, 39),
 (3691, 233, 'الام الغامضة والطفل العبقري - الحلقة 77', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 77, 'ep_233_77_1756541009.mp4', '2025-08-30 08:03:34', 0, 0, 1, 39),
 (3692, 233, 'الام الغامضة والطفل العبقري - الحلقة 78', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 78, 'ep_233_78_1756541022.mp4', '2025-08-30 08:03:47', 0, 0, 1, 39),
-(3821, 237, 'اطفال الأمبراطور', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_237_1_1756746341.mp4', '2025-09-01 17:05:46', 0, 9, 296, 39),
+(3821, 237, 'اطفال الأمبراطور', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 1, 'ep_237_1_1756746341.mp4', '2025-09-01 17:05:46', 0, 9, 297, 39),
 (3822, 237, 'اطفال الأمبراطور - الحلقة 2', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 2, 'ep_237_2_1756746365.mp4', '2025-09-01 17:06:11', 0, 5, 114, 39),
 (3823, 237, 'اطفال الأمبراطور - الحلقة 3', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 3, 'ep_237_3_1756746384.mp4', '2025-09-01 17:06:29', 0, 4, 99, 39),
 (3824, 237, 'اطفال الأمبراطور - الحلقة 4', 'لا تفوّت الفرصة ✨ شاهد أفضل المسلسلات والحلقات حصريًا معنا!', 4, 'ep_237_4_1756746405.mp4', '2025-09-01 17:06:50', 0, 3, 83, 39),
@@ -3663,7 +3792,7 @@ INSERT INTO `users` (`id`, `email`, `name`, `google_id`, `photo_url`, `coins`, `
 (110, 'gpt2boracay.test@gmail.com', 'Mary Jane Doe', '110176952183470939664', NULL, 100, '2025-09-15 10:16:00', '2025-09-15 10:16:00', 0, NULL),
 (111, 'maher.programs@gmail.com', 'ماهر سوفت', '112771276952481695974', NULL, 100, '2025-09-15 16:57:45', '2025-09-15 16:57:45', 0, NULL),
 (113, 'testboracaytcfy2023@gmail.com', 'TC Test', '116716580230395095640', NULL, 100, '2025-09-16 05:51:26', '2025-09-16 05:51:26', 0, NULL),
-(114, 'alaa.7sm90@gmail.com', 'علاء اسماعيل', '115691969490045943257', NULL, 23, '2025-09-16 14:42:38', '2025-09-25 11:21:53', 0, NULL),
+(114, 'alaa.7sm90@gmail.com', 'علاء اسماعيل', '115691969490045943257', NULL, 36, '2025-09-16 14:42:38', '2025-09-25 16:27:19', 0, NULL),
 (115, 'jsilva.jose.silva574@gmail.com', 'Raimundo Edmilson Paiva Paiva', '115758028185902313202', NULL, 100, '2025-09-16 19:23:06', '2025-09-16 19:23:06', 0, NULL),
 (116, 'ahmedwwe791@gmail.com', 'ahmed ELSAKA', '104361405591239113148', NULL, 100, '2025-09-16 19:24:32', '2025-09-16 19:24:32', 0, NULL),
 (118, 'wahid.sarwari606news@gmail.com', 'وحید سروری', '106422297404351169474', NULL, 100, '2025-09-16 21:00:51', '2025-09-16 21:00:51', 0, NULL),
@@ -3708,7 +3837,8 @@ INSERT INTO `users` (`id`, `email`, `name`, `google_id`, `photo_url`, `coins`, `
 (158, 'seyitalhasan084@gmail.com', 'Seyit alhasan', '111600308055318068868', NULL, 22, '2025-09-24 12:46:02', '2025-09-24 13:03:15', 0, NULL),
 (159, 'peaceozumba45@gmail.com', 'Peace Ozumba', '105258821109465166948', NULL, 100, '2025-09-24 14:12:08', '2025-09-24 14:12:08', 0, NULL),
 (160, 'bessiecunningham.12727@gmail.com', 'Bessie Cunningham', '114103842494256678781', NULL, 100, '2025-09-24 15:59:07', '2025-09-24 15:59:07', 0, NULL),
-(161, 'jongsuk8079@gmail.com', 'مريم شريف', '115232274524063181638', NULL, 100, '2025-09-24 16:02:24', '2025-09-24 16:02:24', 0, NULL);
+(161, 'jongsuk8079@gmail.com', 'مريم شريف', '115232274524063181638', NULL, 100, '2025-09-24 16:02:24', '2025-09-24 16:02:24', 0, NULL),
+(162, 'byadrhmzh615@gmail.com', 'بيادر حمزه', '103922273415298858580', NULL, 100, '2025-09-25 13:39:02', '2025-09-25 13:39:02', 0, NULL);
 
 -- --------------------------------------------------------
 
@@ -3746,7 +3876,7 @@ CREATE TABLE `user_dailygifts` (
 --
 
 INSERT INTO `user_dailygifts` (`id`, `user_id`, `gift_id`, `completed_ads`, `completion_time`, `created_at`, `updated_at`) VALUES
-(40, 114, 1, 2, NULL, '2025-09-21 21:36:32', '2025-09-25 08:21:53'),
+(40, 114, 1, 3, '2025-09-25 13:27:19', '2025-09-21 21:36:32', '2025-09-25 13:27:19'),
 (39, 114, 2, 2, '2025-09-23 01:06:10', '2025-09-16 23:22:59', '2025-09-23 01:06:10'),
 (38, 94, 1, 1, NULL, '2025-09-11 04:36:41', '2025-09-14 09:14:23'),
 (37, 103, 3, 1, NULL, '2025-09-09 17:00:36', '2025-09-09 17:00:36'),
@@ -4042,7 +4172,8 @@ INSERT INTO `user_sessions` (`id`, `user_id`, `token`, `expires_at`, `created_at
 (420, 101, 'b097cc183412c67e8370a772a9cec5a8bf9ab47c84913460b80e3dcf49e2aaec', '2025-10-24 16:58:42', '2025-09-24 19:58:42'),
 (421, 101, '88ac24bcaffe282a9c387a284f3ae0c7350aa36685d5921d449eae0e27d50f7a', '2025-10-24 16:59:50', '2025-09-24 19:59:50'),
 (422, 114, '1d20dbde7846db0aa4adc3e0602b27cc599ed94ef8a71338348d0f21b0ad2fc9', '2025-10-24 23:34:14', '2025-09-25 02:34:14'),
-(423, 114, 'c51941e07c40829a7def1943d7752ac9e39a09d97347d3c0b8a13d6594de6e3c', '2025-10-25 00:41:48', '2025-09-25 03:41:48');
+(423, 114, 'c51941e07c40829a7def1943d7752ac9e39a09d97347d3c0b8a13d6594de6e3c', '2025-10-25 00:41:48', '2025-09-25 03:41:48'),
+(424, 162, 'ac7c0a2cf11cd5e739a2c41a9c845b1fe767207e8630ba30dd9cc9cd6f829953', '2025-10-25 10:39:02', '2025-09-25 13:39:02');
 
 -- --------------------------------------------------------
 
@@ -10066,7 +10197,16 @@ INSERT INTO `views` (`id`, `episode_id`, `user_id`, `created_at`) VALUES
 (6004, 3824, 0, '2025-09-25 08:20:31'),
 (6005, 3142, 0, '2025-09-25 08:22:09'),
 (6006, 3143, 0, '2025-09-25 08:22:12'),
-(6007, 3144, 0, '2025-09-25 08:22:17');
+(6007, 3144, 0, '2025-09-25 08:22:17'),
+(6008, 96, 0, '2025-09-25 13:26:28'),
+(6009, 97, 0, '2025-09-25 13:26:32'),
+(6010, 98, 0, '2025-09-25 13:26:39'),
+(6011, 3821, 0, '2025-09-25 13:29:50'),
+(6012, 3468, 0, '2025-09-25 13:29:54'),
+(6013, 3402, 0, '2025-09-25 13:29:58'),
+(6014, 3539, 0, '2025-09-25 13:29:59'),
+(6015, 3468, 0, '2025-09-25 13:31:22'),
+(6016, 3469, 0, '2025-09-25 13:31:24');
 
 -- --------------------------------------------------------
 
@@ -10129,11 +10269,41 @@ ALTER TABLE `admob_settings`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `admob_settings_mohamed`
+--
+ALTER TABLE `admob_settings_mohamed`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `admob_settings_rivo`
+--
+ALTER TABLE `admob_settings_rivo`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- Indexes for table `app_config`
 --
 ALTER TABLE `app_config`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `config_key` (`config_key`);
+
+--
+-- Indexes for table `app_settings`
+--
+ALTER TABLE `app_settings`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `app_settings_mohamed`
+--
+ALTER TABLE `app_settings_mohamed`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `app_settings_rivo`
+--
+ALTER TABLE `app_settings_rivo`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indexes for table `coin_packages`
@@ -10300,13 +10470,43 @@ ALTER TABLE `admin_users`
 -- AUTO_INCREMENT for table `admob_settings`
 --
 ALTER TABLE `admob_settings`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `admob_settings_mohamed`
+--
+ALTER TABLE `admob_settings_mohamed`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `admob_settings_rivo`
+--
+ALTER TABLE `admob_settings_rivo`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `app_config`
 --
 ALTER TABLE `app_config`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
+
+--
+-- AUTO_INCREMENT for table `app_settings`
+--
+ALTER TABLE `app_settings`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `app_settings_mohamed`
+--
+ALTER TABLE `app_settings_mohamed`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `app_settings_rivo`
+--
+ALTER TABLE `app_settings_rivo`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `coin_packages`
@@ -10372,7 +10572,7 @@ ALTER TABLE `Revo_Shorts_admob`
 -- AUTO_INCREMENT for table `series`
 --
 ALTER TABLE `series`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=240;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=243;
 
 --
 -- AUTO_INCREMENT for table `special_offers`
@@ -10390,7 +10590,7 @@ ALTER TABLE `system_settings`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=162;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=163;
 
 --
 -- AUTO_INCREMENT for table `user_ad_watch`
@@ -10414,7 +10614,7 @@ ALTER TABLE `user_package_progress`
 -- AUTO_INCREMENT for table `user_sessions`
 --
 ALTER TABLE `user_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=424;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=425;
 
 --
 -- AUTO_INCREMENT for table `user_unlocked_episodes`
@@ -10426,7 +10626,7 @@ ALTER TABLE `user_unlocked_episodes`
 -- AUTO_INCREMENT for table `views`
 --
 ALTER TABLE `views`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6008;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6017;
 
 --
 -- AUTO_INCREMENT for table `vip_packages`
