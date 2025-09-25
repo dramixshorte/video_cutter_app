@@ -382,7 +382,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
       context: context,
       builder: (context) => Theme(
         data: Theme.of(context).copyWith(
-          dialogBackgroundColor: Color(0xFF2D2D44),
+          dialogTheme: DialogThemeData(backgroundColor: Color(0xFF2D2D44)),
         ),
         child: AlertDialog(
           title: Text(
