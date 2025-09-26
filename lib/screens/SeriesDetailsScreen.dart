@@ -4,283 +4,6 @@ import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
-class SeriesListScreen extends StatefulWidget {
-  const SeriesListScreen({super.key});
-
-  @override
-  State<SeriesListScreen> createState() => _SeriesListScreenState();
-}
-
-class _SeriesListScreenState extends State<SeriesListScreen> {
-  List<Map<String, dynamic>> _seriesList = [];
-  bool _isLoading = true;
-  final GlobalKey<ScaffoldMessengerState> _scaffoldKey =
-      GlobalKey<ScaffoldMessengerState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchSeries();
-  }
-
-  Future<void> _fetchSeries() async {
-    setState(() => _isLoading = true);
-    try {
-      final response = await http.get(
-        Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=get_all_series'),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (data['status'] == 'success') {
-        final List<Map<String, dynamic>> seriesList = [];
-
-        for (var series in data['data']) {
-          seriesList.add({
-            'id': int.tryParse(series['id'].toString()) ?? 0,
-            'name': series['name'].toString(),
-            'image_path': series['image_path'].toString(),
-            'episodes_count':
-                int.tryParse(series['episodes_count'].toString()) ?? 0,
-          });
-        }
-
-        setState(() => _seriesList = seriesList);
-      } else {
-        _showSnackBar('فشل تحميل المسلسلات: ${data['message']}', isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('خطأ في الاتصال: ${e.toString()}', isError: true);
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _showSnackBar(String message, {bool isError = false}) {
-    _scaffoldKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.redAccent : Colors.teal,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  Future<void> _deleteSeries(int seriesId, String imagePath) async {
-    try {
-      final response = await http.post(
-        Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=delete_series'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'series_id': seriesId, 'image_path': imagePath}),
-      );
-      final data = jsonDecode(response.body);
-      if (data['status'] == 'success') {
-        _showSnackBar('تم حذف المسلسل بنجاح');
-        _fetchSeries();
-      } else {
-        _showSnackBar('فشل حذف المسلسل: ${data['message']}', isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('خطأ في الاتصال: ${e.toString()}', isError: true);
-    }
-  }
-
-  void _showDeleteDialog(int seriesId, String seriesName, String imagePath) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF2D2D44),
-        title: Text(
-          'حذف المسلسل',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          'هل أنت متأكد من حذف المسلسل "$seriesName"؟ سيتم حذف جميع الحلقات والصور المرتبطة به.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('إلغاء', style: TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
-              Navigator.pop(context);
-              _deleteSeries(seriesId, imagePath);
-            },
-            child: Text('حذف'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaffoldMessenger(
-      key: _scaffoldKey,
-      child: Scaffold(
-        backgroundColor: Color(0xFF1E1E2E),
-        appBar: AppBar(
-          title: Text(
-            'قائمة المسلسلات',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
-          ),
-          backgroundColor: Color(0xFF1E1E2E),
-          elevation: 0,
-          actions: [
-            IconButton(
-              icon: Icon(Icons.refresh, color: Colors.white),
-              onPressed: _fetchSeries,
-            ),
-          ],
-        ),
-        body: _isLoading
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'جاري تحميل المسلسلات...',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : RefreshIndicator(
-                onRefresh: _fetchSeries,
-                backgroundColor: Color(0xFF1E1E2E),
-                color: Color(0xFF6C63FF),
-                child: _seriesList.isEmpty
-                    ? Center(
-                        child: Text(
-                          'لا توجد مسلسلات',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 18,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: EdgeInsets.all(16),
-                        itemCount: _seriesList.length,
-                        itemBuilder: (context, index) {
-                          final series = _seriesList[index];
-                          return Container(
-                            margin: EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.05),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 8,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => SeriesDetailsScreen(
-                                        seriesId: series['id'],
-                                        seriesName: series['name'],
-                                        imagePath: series['image_path'],
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Row(
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Image.network(
-                                          'https://dramaxbox.bbs.tr/App/series_images/${series['image_path']}',
-                                          width: 80,
-                                          height: 80,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) =>
-                                              Container(
-                                            width: 80,
-                                            height: 80,
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[800],
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Icon(Icons.broken_image, color: Colors.white70),
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              series['name'],
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            SizedBox(height: 8),
-                                            Text(
-                                              'عدد الحلقات: ${series['episodes_count'] ?? 0}',
-                                              style: TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(
-                                          Icons.delete,
-                                          color: Colors.redAccent,
-                                        ),
-                                        onPressed: () => _showDeleteDialog(
-                                          series['id'],
-                                          series['name'],
-                                          series['image_path'],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-      ),
-    );
-  }
-}
-
 class SeriesDetailsScreen extends StatefulWidget {
   final int seriesId;
   final String seriesName;
@@ -385,10 +108,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
           dialogTheme: DialogThemeData(backgroundColor: Color(0xFF2D2D44)),
         ),
         child: AlertDialog(
-          title: Text(
-            'تعديل الحلقة',
-            style: TextStyle(color: Colors.white),
-          ),
+          title: Text('تعديل الحلقة', style: TextStyle(color: Colors.white)),
           content: TextField(
             controller: titleController,
             style: TextStyle(color: Colors.white),
@@ -449,7 +169,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => VideoPlayerScreen(
-          videoUrl: 'https://dramaxbox.bbs.tr/App/videos/$videoPath',
+          videoUrl: 'https://dramaxbox.bbs.tr/App/series_episodes/$videoPath',
         ),
       ),
     );
@@ -464,10 +184,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
         appBar: AppBar(
           title: Text(
             widget.seriesName,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
           ),
           backgroundColor: Color(0xFF1E1E2E),
           elevation: 0,
@@ -484,15 +201,14 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6C63FF),
+                      ),
                     ),
                     SizedBox(height: 16),
                     Text(
                       'جاري تحميل الحلقات...',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 16),
                     ),
                   ],
                 ),
@@ -515,7 +231,11 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Center(
-                            child: Icon(Icons.broken_image, color: Colors.white70, size: 50),
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.white70,
+                              size: 50,
+                            ),
                           ),
                         ),
                       ),
@@ -551,7 +271,10 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                                   ],
                                 ),
                                 child: ListTile(
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
                                   leading: Container(
                                     width: 50,
                                     height: 50,
@@ -579,15 +302,26 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       IconButton(
-                                        icon: Icon(Icons.play_arrow, color: Colors.green),
-                                        onPressed: () => _playEpisode(episode['video_path']),
+                                        icon: Icon(
+                                          Icons.play_arrow,
+                                          color: Colors.green,
+                                        ),
+                                        onPressed: () =>
+                                            _playEpisode(episode['video_path']),
                                       ),
                                       IconButton(
-                                        icon: Icon(Icons.edit, color: Colors.blue),
-                                        onPressed: () => _showEditEpisodeDialog(episode),
+                                        icon: Icon(
+                                          Icons.edit,
+                                          color: Colors.blue,
+                                        ),
+                                        onPressed: () =>
+                                            _showEditEpisodeDialog(episode),
                                       ),
                                       IconButton(
-                                        icon: Icon(Icons.delete, color: Colors.redAccent),
+                                        icon: Icon(
+                                          Icons.delete,
+                                          color: Colors.redAccent,
+                                        ),
                                         onPressed: () => _deleteEpisode(
                                           episode['id'],
                                           episode['video_path'],
@@ -631,7 +365,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   Future<void> _initializeVideoPlayer() async {
     try {
       _videoPlayerController = VideoPlayerController.network(widget.videoUrl);
-      
+
       await _videoPlayerController!.initialize().timeout(Duration(seconds: 10));
 
       if (!mounted) return;
@@ -645,7 +379,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           color: Colors.black,
           child: Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 255, 5, 39)),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Color.fromARGB(255, 255, 5, 39),
+              ),
             ),
           ),
         ),
@@ -703,7 +439,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 255, 99, 190)),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color.fromARGB(255, 255, 99, 190),
+                    ),
                   ),
                   SizedBox(height: 16),
                   Text(
@@ -714,34 +452,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             )
           : _hasError
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, color: Colors.red, size: 50),
-                      SizedBox(height: 16),
-                      Text(
-                        'خطأ في تشغيل الفيديو',
-                        style: TextStyle(color: Colors.white, fontSize: 18),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'تأكد من اتصال الإنترنت وحاول مرة أخرى',
-                        style: TextStyle(color: Colors.white70),
-                        textAlign: TextAlign.center,
-                      ),
-                      SizedBox(height: 20),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF6C63FF),
-                        ),
-                        onPressed: _initializeVideoPlayer,
-                        child: Text('إعادة المحاولة'),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 50),
+                  SizedBox(height: 16),
+                  Text(
+                    'خطأ في تشغيل الفيديو',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
                   ),
-                )
-              : Chewie(controller: _chewieController!),
+                  SizedBox(height: 8),
+                  Text(
+                    'تأكد من اتصال الإنترنت وحاول مرة أخرى',
+                    style: TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFF6C63FF),
+                    ),
+                    onPressed: _initializeVideoPlayer,
+                    child: Text('إعادة المحاولة'),
+                  ),
+                ],
+              ),
+            )
+          : Chewie(controller: _chewieController!),
     );
   }
 }

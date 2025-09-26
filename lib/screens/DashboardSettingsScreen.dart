@@ -4,10 +4,10 @@ import 'package:video_cutter_app/screens/AdmobSettingsTab.dart';
 import 'package:video_cutter_app/screens/AppSettingsTab.dart';
 import 'package:video_cutter_app/screens/CoinPackagesTab.dart';
 import 'package:video_cutter_app/screens/DailyGiftsTab.dart';
+import 'package:video_cutter_app/screens/SeriesManagementScreen.dart';
 import 'package:video_cutter_app/screens/UsersManagementTab.dart';
 import 'package:video_cutter_app/screens/VipPackagesTab.dart';
 import 'package:video_cutter_app/screens/VideoCutterScreen.dart';
-import 'package:video_cutter_app/screens/SeriesDetailsScreen.dart';
 
 class DashboardSettingsScreen extends StatefulWidget {
   const DashboardSettingsScreen({super.key});
@@ -156,7 +156,7 @@ class _DashboardSettingsScreenState extends State<DashboardSettingsScreen>
     switch (type) {
       // إدارة المحتوى
       case 'series_management':
-        page = const SeriesListScreen();
+        page = const SeriesManagementScreen();
         break;
       case 'video_cutter':
         page = const VideoCutterScreen();

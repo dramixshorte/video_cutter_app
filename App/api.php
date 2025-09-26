@@ -78,11 +78,13 @@ try {
         case 'create_series':
             createSeries($conn);
             break;
-       case 'upload_episode':
-            uploadEpisode($conn);
-        case 'get_series':
-            getSeries($conn);
-            break;
+     case 'upload_episode':
+    uploadEpisode($conn);
+    break;   // <<< مهم جداً
+case 'get_series':
+    getSeries($conn);
+    break;
+
              // الدوال الجديدة لإدارة المسلسلات
         case 'get_all_series':
             getAllSeries($conn);
@@ -98,6 +100,12 @@ try {
             break;
         case 'update_episode':
             updateEpisode($conn);
+            break;
+        case 'update_series':
+            updateSeries($conn);
+            break;
+        case 'send_notification':
+            sendNotification($conn);
             break;
             
       case 'manage_admob':
@@ -261,7 +269,7 @@ function getSeriesEpisodes($conn) {
     
     echo json_encode([
         'status' => 'success',
-        'data' => $episodes,
+        'episodes' => $episodes,
         'count' => count($episodes)
     ]);
 }
@@ -497,54 +505,65 @@ function handleImageUpload($conn) {
 
 
 function uploadEpisode($conn) {
-    if (!isset($_POST['series_id']) || !isset($_POST['episode_number'])) {
-        throw new Exception('Missing required fields');
-    }
-  // بداية تسجيل تفاصيل الرفع
-    logActivity("====== بدء رفع حلقة جديدة ======");
+    // بداية تسجيل تفاصيل الرفع
+    mmm("====== بدء رفع حلقة جديدة ======");
     
-  
-    
-    if (!isset($_POST['episode_number'])) {
-        logActivity("ERROR: episode_number not provided");
-        throw new Exception('Missing episode_number');
+    // التحقق من طريقة الطلب
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        mmm("ERROR: Invalid request method");
+        echo json_encode(['status' => 'error', 'message' => 'Method not allowed']);
+        return;
     }
-
+    
+    // التحقق من وجود الحقول المطلوبة
+    if (!isset($_POST['series_id']) || !isset($_POST['episode_number']) || !isset($_POST['title'])) {
+        mmm("ERROR: Missing required fields");
+        mmm("POST data: " . print_r($_POST, true));
+        mmm("FILES data: " . print_r($_FILES, true));
+        echo json_encode(['status' => 'error', 'message' => 'Missing required fields: series_id, episode_number, title']);
+        return;
+    }
+    
     $series_id = intval($_POST['series_id']);
     $episode_number = intval($_POST['episode_number']);
-    $title = $conn->real_escape_string($_POST['title'] ?? '');
+    $title = $conn->real_escape_string($_POST['title']);
     
-    logActivity("المعطيات المستلمة:");
-    logActivity("series_id: $series_id");
-    logActivity("episode_number: $episode_number");
-    logActivity("title: $title");
+    mmm("المعطيات المستلمة:");
+    mmm("series_id: $series_id");
+    mmm("episode_number: $episode_number");
+    mmm("title: $title");
 
     if (!isset($_FILES['video'])) {
-        logActivity("ERROR: No video file uploaded");
-        throw new Exception('No video uploaded');
+        mmm("ERROR: No video file uploaded");
+        echo json_encode(['status' => 'error', 'message' => 'No video uploaded']);
+        return;
     }
     
     $video = $_FILES['video'];
-    logActivity("معلومات ملف الفيديو:");
-    logActivity(print_r($video, true));
+    mmm("معلومات ملف الفيديو:");
+    mmm("Name: " . $video['name']);
+    mmm("Size: " . $video['size']);
+    mmm("Temp: " . $video['tmp_name']);
+    mmm("Error: " . $video['error']);
+
     // بدء المعاملة
     $conn->autocommit(false);
-    $success = false;
-    $target_path = '';
-    $series_id = intval($_POST['series_id']);
     
     try {
-        $episode_number = intval($_POST['episode_number']);
-        $title = $conn->real_escape_string($_POST['title'] ?? '');
-
-        if (!isset($_FILES['video'])) throw new Exception('No video uploaded');
-        $video = $_FILES['video'];
-        
         // التحقق من صحة الفيديو
         $video_type = strtolower(pathinfo($video['name'], PATHINFO_EXTENSION));
-        $allowed = ['mp4', 'avi', 'mov', 'mkv', 'webm'];
-        if (!in_array($video_type, $allowed)) throw new Exception('Invalid video type');
-        if ($video['size'] > 500 * 1024 * 1024) throw new Exception('Video exceeds 500MB');
+        $allowed = ['mp4', 'avi', 'mov', 'mkv', 'webm', '3gp'];
+        if (!in_array($video_type, $allowed)) {
+            throw new Exception('نوع الفيديو غير مدعوم: ' . $video_type);
+        }
+        
+        if ($video['size'] > 500 * 1024 * 1024) {
+            throw new Exception('حجم الفيديو يتجاوز 500MB');
+        }
+
+        if ($video['error'] !== UPLOAD_ERR_OK) {
+            throw new Exception('خطأ في رفع الملف: ' . $video['error']);
+        }
 
         $target_dir = "series_episodes/";
         if (!file_exists($target_dir)) {
@@ -558,7 +577,9 @@ function uploadEpisode($conn) {
         $stmt->bind_param("i", $series_id);
         $stmt->execute();
         $stmt->bind_result($series_name, $series_image);
-        if (!$stmt->fetch()) throw new Exception('Series not found');
+        if (!$stmt->fetch()) {
+            throw new Exception('Series not found with ID: ' . $series_id);
+        }
         $stmt->close();
 
         // التحقق من وجود الحلقة وحذفها إذا كانت موجودة
@@ -578,6 +599,8 @@ function uploadEpisode($conn) {
             $delete->bind_param("i", $old_id);
             $delete->execute();
             $delete->close();
+            
+            mmm("تم حذف الحلقة القديمة: $old_path");
         }
         $chk->close();
 
@@ -585,10 +608,15 @@ function uploadEpisode($conn) {
         $filename = "ep_{$series_id}_{$episode_number}_" . time() . '.' . $video_type;
         $target_path = $target_dir . $filename;
 
+        mmm("محاولة نقل الملف إلى: $target_path");
+        
         if (move_uploaded_file($video['tmp_name'], $target_path)) {
+            mmm("تم نقل الملف بنجاح");
+            
             // حذف الفيديو القديم إذا كان موجودًا
-            if (!empty($old_video_path) && file_exists($target_dir . $old_video_path)) {
-                @unlink($target_dir . $old_video_path);
+            if (!empty($old_video_path) && file_exists($target_dir . basename($old_video_path))) {
+                @unlink($target_dir . basename($old_video_path));
+                mmm("تم حذف الفيديو القديم: $old_video_path");
             }
             
             // إدراج الحلقة الجديدة
@@ -596,41 +624,25 @@ function uploadEpisode($conn) {
             $insert->bind_param("isis", $series_id, $title, $episode_number, $filename);
 
             if ($insert->execute()) {
-                // إرسال إشعار
-               // $notificationTitle = "🎥 حلقة جديدة: {$series_name}";
-              //  $notificationBody = "الحلقة $episode_number: $title";
-
-              //  global $messaging;
-               // if ($messaging !== null) {
-                  ///  $message = CloudMessage::withTarget('topic', 'all')
-                      //  ->withNotification(Notification::create($notificationTitle, $notificationBody))
-                       // ->withData([
-                         //   'type' => 'new_episode',
-                         //   'series_id' => $series_id,
-                            //'episode_number' => $episode_number,
-                           // 'series_image' => $series_image
-                       // ]);
-                    
-                  //  try {
-                       /// $messaging->send($message);
-                       // logActivity("Notification sent for new episode: {$series_name} - Ep $episode_number");
-                  ///  } catch (Exception $e) {
-                       /// logError("Failed to send notification: " . $e->getMessage());
-                  ///  }
-               // }
-
+                mmm("تم إدراج الحلقة في قاعدة البيانات");
+                
                 $conn->commit();
-                $success = true;
+                
                 echo json_encode([
                     'status' => 'success',
                     'message' => 'Episode uploaded successfully',
-                    'file_name' => $filename
+                    'file_name' => $filename,
+                    'episode_id' => $insert->insert_id
                 ]);
+                
+                mmm("تم رفع الحلقة بنجاح: $filename");
             } else {
-                throw new Exception('Database insert failed');
+                throw new Exception('فشل إدراج الحلقة في قاعدة البيانات: ' . $conn->error);
             }
+            
+            $insert->close();
         } else {
-            throw new Exception('Failed to move uploaded file');
+            throw new Exception('فشل في نقل الملف المرفوع');
         }
     } catch (Exception $e) {
         $conn->rollback();
@@ -640,8 +652,8 @@ function uploadEpisode($conn) {
             @unlink($target_path);
         }
         
-        logError("Error in uploadEpisode: " . $e->getMessage());
-        throw $e;
+        ddd("Error in uploadEpisode: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     } finally {
         $conn->autocommit(true);
     }
@@ -649,8 +661,15 @@ function uploadEpisode($conn) {
 
 
 
+function mmm($msg) {
+    $logFile = __DIR__ . "/activity.log";
+    file_put_contents($logFile, "[".date('Y-m-d H:i:s')."] ACTIVITY: $msg\n", FILE_APPEND);
+}
 
-
+function ddd($msg) {
+    $logFile = __DIR__ . "/error.log";
+    file_put_contents($logFile, "[".date('Y-m-d H:i:s')."] ERROR: $msg\n", FILE_APPEND);
+}
 
 
 
@@ -1012,9 +1031,38 @@ function checkSeries($conn) {
 
 
 function getSeries($conn) {
-    $result = $conn->query("SELECT id, name, image_path FROM series ORDER BY id DESC");
+    $query = "
+        SELECT 
+            s.id, 
+            s.name, 
+            s.image_path,
+            COUNT(e.id) as episodes_count,
+            s.created_at
+        FROM 
+            series s
+        LEFT JOIN 
+            episodes e ON s.id = e.series_id
+        GROUP BY 
+            s.id
+        ORDER BY 
+            s.created_at DESC
+    ";
+    
+    $result = $conn->query($query);
     $data = [];
-    while ($row = $result->fetch_assoc()) $data[] = $row;
+    
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $data[] = [
+                'id' => (int)$row['id'],
+                'name' => $row['name'],
+                'image_path' => $row['image_path'],
+                'episodes_count' => (int)$row['episodes_count'],
+                'created_at' => $row['created_at']
+            ];
+        }
+    }
+    
     echo json_encode(['status' => 'success', 'series' => $data]);
 }
 
@@ -1976,5 +2024,136 @@ function _getDefaultDescriptionForApp($app_key) {
         case 'main':
         default:
             return 'DramaXBox - منصة المسلسلات المتقدمة للمحتوى العربي والعالمي';
+    }
+}
+
+// وظيفة تحديث المسلسل
+function updateSeries($conn) {
+    try {
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        if (!isset($input['series_id']) || !isset($input['name'])) {
+            echo json_encode(['status' => 'error', 'message' => 'بيانات غير مكتملة']);
+            return;
+        }
+        
+        $series_id = $input['series_id'];
+        $name = trim($input['name']);
+        $description = trim($input['description'] ?? '');
+        $new_image_path = $input['new_image_path'] ?? null;
+        $old_image_path = $input['old_image_path'] ?? null;
+        
+        // التحقق من وجود المسلسل
+        $check_stmt = $conn->prepare("SELECT image_path FROM series WHERE id = ?");
+        $check_stmt->bind_param("i", $series_id);
+        $check_stmt->execute();
+        $result = $check_stmt->get_result();
+        
+        if ($result->num_rows === 0) {
+            echo json_encode(['status' => 'error', 'message' => 'المسلسل غير موجود']);
+            return;
+        }
+        
+        $current_series = $result->fetch_assoc();
+        $check_stmt->close();
+        
+        // تحديث بيانات المسلسل
+        if ($new_image_path) {
+            // إذا كانت هناك صورة جديدة، نحدث مع الصورة الجديدة
+            $stmt = $conn->prepare("UPDATE series SET name = ?, image_path = ? WHERE id = ?");
+            $stmt->bind_param("ssi", $name, $new_image_path, $series_id);
+        } else {
+            // إذا لم تكن هناك صورة جديدة، نحدث فقط الاسم
+            $stmt = $conn->prepare("UPDATE series SET name = ? WHERE id = ?");
+            $stmt->bind_param("si", $name, $series_id);
+        }
+        
+        if ($stmt->execute()) {
+            // إذا تم رفع صورة جديدة، احذف الصورة القديمة
+            if ($new_image_path && $current_series['image_path']) {
+                $old_image_full_path = __DIR__ . '/series_images/' . $current_series['image_path'];
+                if (file_exists($old_image_full_path)) {
+                    unlink($old_image_full_path);
+                }
+            }
+            
+            echo json_encode([
+                'status' => 'success', 
+                'message' => 'تم تحديث المسلسل بنجاح',
+                'series_id' => $series_id
+            ]);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'فشل في تحديث المسلسل']);
+        }
+        
+        $stmt->close();
+        
+    } catch (Exception $e) {
+        logError("updateSeries Error: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'خطأ في تحديث المسلسل: ' . $e->getMessage()]);
+    }
+}
+
+// وظيفة إرسال الإشعارات للمسلسلات
+function sendNotification($conn) {
+    global $messaging;
+    
+    try {
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        logActivity("تم استلام طلب إرسال إشعار: " . json_encode($input));
+        
+        if (!isset($input['type']) || !isset($input['title'])) {
+            echo json_encode(['status' => 'error', 'message' => 'بيانات غير مكتملة']);
+            return;
+        }
+        
+        $type = $input['type'];
+        $title = $input['title'];
+        $body = $input['body'] ?? '';
+        $image = $input['image'] ?? '';
+        $series_id = $input['series_id'] ?? '';
+        
+        // إنشاء البيانات للإشعار المتقدم
+        $notificationData = [
+            'type' => 'new_series', // نوع ثابت للمسلسلات
+            'series_id' => $series_id,
+            'series_title' => $title,
+            'series_description' => $body,
+            'image_url' => $image,
+            'timestamp' => date('Y-m-d H:i:s'),
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
+        ];
+        
+        // استخدام النظام الموثوق لإرسال الإشعار
+        $result = sendReliableNotification(
+            $messaging, 
+            '🎬 ' . $title, 
+            $body, 
+            $notificationData, 
+            $image
+        );
+        
+        if ($result['success']) {
+            logActivity("تم إرسال إشعار المسلسل بنجاح: " . $title . " (محاولات: " . $result['attempts'] . ")");
+            echo json_encode([
+                'status' => 'success', 
+                'message' => 'تم إرسال الإشعار بنجاح إلى جميع المستخدمين! 🎉',
+                'series_title' => $title,
+                'sent_to' => 'all_users',
+                'attempts' => $result['attempts']
+            ]);
+        } else {
+            logError("فشل إرسال إشعار المسلسل: " . $result['error']);
+            echo json_encode([
+                'status' => 'error', 
+                'message' => 'فشل في إرسال الإشعار: ' . $result['error'],
+                'attempts' => $result['attempts']
+            ]);
+        }
+        
+    } catch (Exception $e) {
+        logError("sendNotification Error: " . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'فشل في إرسال الإشعار: ' . $e->getMessage()]);
     }
 }

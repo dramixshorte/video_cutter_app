@@ -1,15 +1,28 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- أذونات التخزين الأساسية -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+    
+    <!-- أذونات Android 13+ للملفات والوسائط -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+    
+    <!-- أذونات العمل في الخلفية -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    
+    <!-- أذونات الشبكة والإشعارات -->
     <uses-permission android:name="android.permission.INTERNET"/>
-<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- منع النوم أثناء الرفع -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
 
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_cutter_app/dashboard_screen.dart';
-import 'package:video_cutter_app/screens/SeriesDetailsScreen.dart';
+import 'package:video_cutter_app/screens/SeriesListScreen.dart';
 import 'package:video_cutter_app/screens/VideoCutterScreen.dart';
 
 class MainScreen extends StatefulWidget {

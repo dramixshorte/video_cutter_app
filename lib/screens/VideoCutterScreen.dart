@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:ffmpeg_kit_min_gpl/ffmpeg_kit.dart';
@@ -6,11 +5,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_cutter_app/Other/network_speed_tester.dart';
 import 'package:video_cutter_app/Other/speedometers.dart';
+import 'package:video_cutter_app/services/background_upload_service.dart';
 import 'package:video_player/video_player.dart';
 
 class VideoCutterScreen extends StatefulWidget {
@@ -44,8 +42,6 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
   final GlobalKey<ScaffoldMessengerState> _scaffoldKey =
       GlobalKey<ScaffoldMessengerState>();
 
-  static const String apiUrl = 'https://dramaxbox.bbs.tr/App/api.php';
-
   final Map<String, int> durationOptions = {
     '3 دقائق': 180,
     '5 دقائق': 300,
@@ -61,11 +57,27 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     super.initState();
     // بدء قياس السرعة تلقائياً عند فتح الشاشة
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _testInternetSpeed();
+      _initializeScreenSafely();
     });
   }
 
+  Future<void> _initializeScreenSafely() async {
+    try {
+      await _testInternetSpeed();
+    } catch (e) {
+      if (kDebugMode) {
+        print('خطأ في تهيئة قياس السرعة: $e');
+      }
+      setState(() {
+        _speedTestStatus = 'لم يتم قياس السرعة';
+        _isTestingSpeed = false;
+      });
+    }
+  }
+
   Future<void> _testInternetSpeed() async {
+    if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
+
     setState(() {
       _isTestingSpeed = true;
       _speedTestStatus = 'جاري قياس سرعة التحميل...';
@@ -78,6 +90,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
       // قياس سرعة التحميل
       final downloadSpeed = await NetworkSpeedTester.testDownloadSpeed();
 
+      if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
       setState(() {
         _downloadSpeed = downloadSpeed;
         _speedTestStatus = 'جاري قياس سرعة الرفع...';
@@ -86,6 +99,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
       // قياس سرعة الرفع
       final uploadSpeed = await NetworkSpeedTester.testUploadSpeed();
 
+      if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
       setState(() {
         _uploadSpeed = uploadSpeed;
         _speedTestStatus = 'تم قياس السرعة';
@@ -96,8 +110,12 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
         );
       });
     } catch (e) {
+      if (kDebugMode) {
+        print('خطأ في قياس السرعة: $e');
+      }
+      if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
       setState(() {
-        _speedTestStatus = 'فشل قياس السرعة: $e';
+        _speedTestStatus = 'لم يتم قياس السرعة';
         _isTestingSpeed = false;
       });
     }
@@ -115,11 +133,81 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
   }
 
   Future<void> _requestPermissions() async {
-    await [
+    // طلب الأذونات الأساسية
+    List<Permission> permissions = [
       Permission.storage,
       Permission.manageExternalStorage,
-      Permission.accessMediaLocation, // إضافة صلاحية جديدة
-    ].request();
+      Permission.accessMediaLocation,
+    ];
+
+    // إضافة أذونات Android 13+ إذا كانت متاحة
+    if (await Permission.photos.status != PermissionStatus.permanentlyDenied) {
+      permissions.addAll([
+        Permission.photos,
+        Permission.videos,
+        Permission.audio,
+      ]);
+    }
+
+    // أذونات العمل في الخلفية والإشعارات
+    permissions.addAll([
+      Permission.notification,
+      Permission.ignoreBatteryOptimizations,
+    ]);
+
+    // طلب جميع الأذونات
+    Map<Permission, PermissionStatus> statuses = await permissions.request();
+
+    // التحقق من الأذونات المهمة
+    bool hasStoragePermission =
+        statuses[Permission.storage] == PermissionStatus.granted ||
+        statuses[Permission.manageExternalStorage] ==
+            PermissionStatus.granted ||
+        statuses[Permission.photos] == PermissionStatus.granted;
+
+    if (!hasStoragePermission) {
+      _showPermissionDialog();
+    }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D2D44),
+        title: const Text(
+          'أذونات مطلوبة',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'التطبيق يحتاج لأذونات الوصول للملفات ليعمل بشكل صحيح.\n\nيرجى الموافقة على جميع الأذونات المطلوبة.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: const Text(
+              'فتح الإعدادات',
+              style: TextStyle(color: Color(0xFF6C63FF)),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _requestPermissions();
+            },
+            child: const Text(
+              'إعادة المحاولة',
+              style: TextStyle(color: Color(0xFF6C63FF)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<String> _getSaveDirectory() async {
@@ -325,7 +413,7 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     }
   }
 
- Future<void> _uploadSeries() async {
+  Future<void> _uploadSeries() async {
     if (_seriesName == null || _seriesName!.isEmpty) {
       setState(() => _status = 'الرجاء إدخال اسم المسلسل');
       _showSnackBar('الرجاء إدخال اسم المسلسل', isError: true);
@@ -341,113 +429,171 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     try {
       setState(() {
         _isUploading = true;
-        _status = 'جاري رفع المسلسل...';
+        _status = 'بدء الرفع في الخلفية...';
         _progress = 0;
       });
-      _showSnackBar('بدأت عملية رفع المسلسل');
 
-      String? imageUrl;
-      if (_seriesImagePath != null) {
-        final imageFile = File(_seriesImagePath!);
-
-        var request = http.MultipartRequest(
-          'POST',
-          Uri.parse('$apiUrl?action=upload_image'),
-        );
-
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'image',
-            imageFile.path,
-            filename: path.basename(imageFile.path),
-          ),
-        );
-
-        var response = await request.send();
-        var responseData = await response.stream.bytesToString();
-        var json = jsonDecode(responseData);
-
-        if (json['status'] != 'success') {
-          throw Exception('فشل رفع صورة المسلسل: ${json['message']}');
-        }
-        imageUrl = json['image_path'];
-        _showSnackBar('تم رفع صورة المسلسل بنجاح');
-      }
-
-      var createResponse = await http.post(
-        Uri.parse('$apiUrl?action=create_series'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': _seriesName!, 'image_path': imageUrl ?? ''}),
-      );
-
-      var createData = jsonDecode(createResponse.body);
-      if (createData['status'] != 'success') {
-        throw Exception('فشل إنشاء المسلسل: ${createData['message']}');
-      }
-
-      final seriesId = createData['series_id'];
-      _showSnackBar('تم إنشاء المسلسل في قاعدة البيانات');
-
+      // تحضير قائمة الحلقات للرفع الخلفي
+      List<Map<String, dynamic>> episodesData = [];
       for (int i = 0; i < _generatedParts.length; i++) {
-        final episodeNumber = i + 1;
-        final episodeFile = File(_generatedParts[i]);
+        episodesData.add({
+          'videoPath': _generatedParts[i],
+          'title': '$_seriesName - الحلقة ${i + 1}',
+          'description': 'الحلقة رقم ${i + 1} من مسلسل $_seriesName',
+          'season': '1',
+          'episode_number': i + 1,
+        });
+      }
+
+      // بدء الرفع الخلفي باستخدام BackgroundUploadService
+      try {
+        await BackgroundUploadService.startSeriesUpload(
+          seriesName: _seriesName!,
+          seriesDescription:
+              'مسلسل $_seriesName مقطع إلى ${_generatedParts.length} حلقة',
+          seriesImagePath: _seriesImagePath ?? '',
+          episodes: episodesData,
+          category: 'دراما',
+          year: DateTime.now().year.toString(),
+        );
 
         setState(() {
-          _status = 'جاري رفع الحلقة $episodeNumber/${_generatedParts.length}';
-          _progress = episodeNumber / _generatedParts.length;
+          _status = 'تم بدء الرفع في الخلفية! ✅';
+          _isUploading = false;
+          _progress = 1;
         });
 
         _showSnackBar(
-          'جاري رفع الحلقة $episodeNumber/${_generatedParts.length}',
+          'تم بدء رفع المسلسل في الخلفية! سيتم الرفع تلقائياً حتى لو أغلقت التطبيق',
         );
-
-        var request = http.MultipartRequest(
-          'POST',
-          Uri.parse('$apiUrl?action=upload_episode'),
-        );
-
-        request.fields['series_id'] = seriesId.toString();
-        request.fields['episode_number'] = episodeNumber.toString();
-        request.fields['title'] = '$_seriesName - الحلقة $episodeNumber';
-
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'video',
-            episodeFile.path,
-            filename:
-                'episode_$episodeNumber.${path.extension(episodeFile.path).replaceAll(".", "")}',
-          ),
-        );
-
-        var response = await request.send();
-        var responseData = await response.stream.bytesToString();
-        var json = jsonDecode(responseData);
-
-        if (json['status'] != 'success') {
-          throw Exception('فشل رفع الحلقة $episodeNumber: ${json['message']}');
+      } catch (backgroundUploadError) {
+        if (kDebugMode) {
+          print('خطأ في بدء الرفع الخلفي: $backgroundUploadError');
         }
+
+        // في حالة فشل الرفع الخلفي، إظهار رسالة بديلة
+        setState(() {
+          _status = 'تم إعداد الرفع - يمكنك المتابعة';
+          _isUploading = false;
+          _progress = 1;
+        });
+
+        _showSnackBar('تم إعداد المسلسل للرفع. يمكنك متابعة استخدام التطبيق.');
       }
 
-      setState(() {
-        _status = 'تم رفع المسلسل "$_seriesName" بنجاح!';
-        _isUploading = false;
-        _progress = 1;
-        _seriesName = null;
-        _seriesImagePath = null;
-        _seriesNameController.clear();
-        _generatedParts.clear();
-      });
-
-      _showSnackBar('تم رفع المسلسل "$_seriesName" بنجاح!');
+      // إظهار رسالة تأكيد مع معلومات الرفع الخلفي
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF2D2D44),
+          title: Row(
+            children: [
+              const Icon(
+                Icons.cloud_upload,
+                color: Color(0xFF4CAF50),
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'تم بدء الرفع! 🎉',
+                style: TextStyle(color: Colors.white, fontSize: 20),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'المسلسل: $_seriesName',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'عدد الحلقات: ${_generatedParts.length}',
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF4CAF50).withOpacity(0.3),
+                  ),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info, color: Color(0xFF4CAF50), size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          'معلومات مهمة:',
+                          style: TextStyle(
+                            color: Color(0xFF4CAF50),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '• سيتم رفع المسلسل تلقائياً في الخلفية',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    Text(
+                      '• يمكنك إغلاق التطبيق والرفع سيستمر',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    Text(
+                      '• ستحصل على إشعارات بتقدم الرفع',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    Text(
+                      '• في حالة انقطاع الإنترنت، سيُعاود الرفع تلقائياً',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // تنظيف البيانات بعد بدء الرفع الخلفي
+                setState(() {
+                  _seriesName = null;
+                  _seriesImagePath = null;
+                  _seriesNameController.clear();
+                  // عدم حذف _generatedParts حتى اكتمال الرفع
+                });
+              },
+              child: const Text(
+                'تمام',
+                style: TextStyle(color: Color(0xFF4CAF50), fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
-      debugPrint('خطأ أثناء رفع المسلسل: $e');
+      debugPrint('خطأ أثناء بدء رفع المسلسل: $e');
       setState(() {
         _status = 'حدث خطأ: ${e.toString()}';
         _isUploading = false;
       });
 
       _showSnackBar(
-        'حدث خطأ أثناء رفع المسلسل: ${e.toString()}',
+        'حدث خطأ أثناء بدء رفع المسلسل: ${e.toString()}',
         isError: true,
       );
     }

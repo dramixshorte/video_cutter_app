@@ -1,44 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_background/flutter_background.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:workmanager/workmanager.dart';
 import 'dashboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // تمكين العرض من الحافة إلى الحافة لـ Android 15
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  try {
+    // تمكين العرض من الحافة إلى الحافة لـ Android 15
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  // إعدادات نمط النظام للتوافق مع Android 15
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.light,
-      systemNavigationBarContrastEnforced: false,
-    ),
-  );
+    // إعدادات نمط النظام للتوافق مع Android 15
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
 
-  final androidConfig = FlutterBackgroundAndroidConfig(
-    notificationTitle: "جاري رفع الحلقات",
-    notificationText: "التطبيق يعمل في الخلفية",
-    notificationImportance: AndroidNotificationImportance.high,
-  );
-
-  final hasPermissions = await FlutterBackground.initialize(
-    androidConfig: androidConfig,
-  );
-
-  if (hasPermissions) {
-    await FlutterBackground.enableBackgroundExecution();
+    print('بدء تهيئة التطبيق...');
+  } catch (e) {
+    print('خطأ في التهيئة الأساسية: $e');
   }
-  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
-  await WakelockPlus.enable();
 
   runApp(const VideoCutterApp());
 }
