@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform, Directory;
+import 'dart:io' show Platform, Directory, File;
 import 'dart:math';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint, kDebugMode;
 import 'package:ffmpeg_kit_min_gpl/ffmpeg_kit.dart';
@@ -50,6 +50,11 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
     SegmentProgressCallback? onPartComplete,
   }) async {
     try {
+      // Preflight: تأكد أن مجلد الإخراج قابل للكتابة قبل بدء أي قص
+      final preflight = await _preflightWrite();
+      if (preflight != null) {
+        return VideoProcessResult.failure(preflight);
+      }
       final duration = await _probeDuration(inputPath);
       if (duration <= 0) {
         // Attempt a minimal single-part pass (treat as unknown but proceed)
@@ -67,7 +72,8 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
       }
 
       final totalParts = (duration / segmentSeconds).ceil();
-      final saveDir = await _resolveOutputDir();
+      final saveDir =
+          await _resolveOutputDir(); // مضمون أنه قابل للكتابة بعد preflight
       final List<String> parts = [];
       for (var i = 0; i < totalParts; i++) {
         final start = i * segmentSeconds;
@@ -94,9 +100,8 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
         final rc = await session.getReturnCode();
         if (rc == null || !rc.isValueSuccess()) {
           final logs = await session.getAllLogsAsString();
-          return VideoProcessResult.failure(
-            'فشل قص الجزء ${i + 1}: ${logs ?? 'خطأ'}',
-          );
+          final analyzed = _analyzeFfmpegFailure(logs);
+          return VideoProcessResult.failure('فشل قص الجزء ${i + 1}: $analyzed');
         }
         parts.add(outputPath);
         if (onPartComplete != null) onPartComplete(i + 1, totalParts);
@@ -116,6 +121,10 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
     SegmentProgressCallback? onPartComplete,
   }) async {
     try {
+      final preflight = await _preflightWrite();
+      if (preflight != null) {
+        return VideoProcessResult.failure(preflight);
+      }
       final duration = await _probeDuration(inputPath);
       if (duration <= 0) {
         final single = await _cutSingleCopy(inputPath);
@@ -160,8 +169,9 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
         final rc = await session.getReturnCode();
         if (rc == null || !rc.isValueSuccess()) {
           final logs = await session.getAllLogsAsString();
+          final analyzed = _analyzeFfmpegFailure(logs);
           return VideoProcessResult.failure(
-            'فشل قص الجزء العشوائي ${index + 1}: ${logs ?? 'خطأ'}',
+            'فشل قص الجزء العشوائي ${index + 1}: $analyzed',
           );
         }
         parts.add(outputPath);
@@ -248,6 +258,10 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
       final session = await FFmpegKit.executeWithArguments(args);
       final rc = await session.getReturnCode();
       if (rc != null && rc.isValueSuccess()) return outputPath;
+      final logs = await session.getAllLogsAsString();
+      if (logs != null && logs.contains('Permission denied')) {
+        if (kDebugMode) debugPrint('FFmpeg denied writing single copy');
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Single copy fail: $e');
     }
@@ -255,16 +269,28 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
   }
 
   Future<Directory> _resolveOutputDir() async {
-    // Android: مجلد ثابت مطلوب حسب طلبك
+    // Android: استخدم مجلد خاص بالتطبيق لتجنّب مشاكل MANAGE_EXTERNAL_STORAGE و MIUI
     if (Platform.isAndroid) {
       try {
-        final dir = Directory('/storage/emulated/0/Download/DramaxShort');
-        if (!await dir.exists()) {
-          await dir.create(recursive: true);
+        // app-specific external (/storage/emulated/0/Android/data/<pkg>/files)
+        final base = await getExternalStorageDirectory();
+        if (base != null) {
+          final dir = Directory('${base.path}/DramaxShortParts');
+          if (!await dir.exists()) await dir.create(recursive: true);
+          // تأكد من إمكانية الكتابة
+          if (await _canWriteTo(dir)) return dir;
         }
-        return dir;
       } catch (e) {
-        if (kDebugMode) debugPrint('Failed creating DramaxShort directory: $e');
+        if (kDebugMode) debugPrint('Primary external dir failed: $e');
+      }
+      // محاولة ثانوية: المستندات الداخلية للتطبيق
+      try {
+        final docs = await getApplicationDocumentsDirectory();
+        final fallback = Directory('${docs.path}/DramaxShortParts');
+        if (!await fallback.exists()) await fallback.create(recursive: true);
+        return fallback;
+      } catch (e) {
+        if (kDebugMode) debugPrint('Fallback docs dir failed: $e');
       }
     }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -277,6 +303,49 @@ class _FfmpegVideoProcessor extends BaseVideoProcessor {
     }
     final docs = await getApplicationDocumentsDirectory();
     return docs;
+  }
+
+  // يقوم بمحاولة كتابة و حذف ملف اختبار للتأكد من الصلاحيات
+  Future<String?> _preflightWrite() async {
+    try {
+      final dir = await _resolveOutputDir();
+      if (!await dir.exists()) return 'مجلد الإخراج غير موجود';
+      final testFile = File(
+        '${dir.path}/__perm_test_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await testFile.writeAsString('ok');
+      await testFile.delete();
+      return null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Preflight write failed: $e');
+      return 'لا يمكن الكتابة في مجلد الإخراج (تحقق من الأذونات أو المساحة)';
+    }
+  }
+
+  Future<bool> _canWriteTo(Directory dir) async {
+    try {
+      final probe = File('${dir.path}/.wtest');
+      await probe.writeAsString('1');
+      await probe.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _analyzeFfmpegFailure(String? logs) {
+    if (logs == null || logs.isEmpty) return 'خطأ غير معروف';
+    if (logs.contains('Permission denied') ||
+        logs.contains('Operation not permitted')) {
+      return 'فشل الوصول للملفات: لا يملك التطبيق إذناً للكتابة أو القراءة في هذا المجلد. استخدم مجلد التطبيق الافتراضي أو امنح صلاحية الوسائط من الإعدادات.';
+    }
+    if (logs.contains('No such file or directory')) {
+      return 'الملف غير موجود أو تم نقله';
+    }
+    if (logs.contains('Invalid data found')) {
+      return 'ملف فيديو تالف أو ترميز غير مدعوم';
+    }
+    return logs.split('\n').take(8).join('\n');
   }
 }
 

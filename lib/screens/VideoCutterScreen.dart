@@ -63,14 +63,80 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
   }
 
   Future<void> _requestPermissions() async {
-    final statuses = await [
-      Permission.storage,
-      Permission.photos,
-      Permission.mediaLibrary,
-    ].request();
-    if (statuses.values.any((s) => s.isDenied || s.isPermanentlyDenied)) {
-      _showSnackBar('يرجى منح الأذونات المطلوبة', isError: true);
+    try {
+      // طلب الأذونات الأساسية أولاً
+      final Map<Permission, PermissionStatus> statuses = await [
+        Permission.storage,
+        Permission.manageExternalStorage,
+        Permission.photos,
+        Permission.videos,
+        Permission.mediaLibrary,
+      ].request();
+
+      // فحص إذا كان هناك أذونات مرفوضة
+      bool hasdenied = statuses.values.any(
+        (status) => status.isDenied || status.isPermanentlyDenied,
+      );
+
+      if (hasdenied) {
+        // محاولة ثانية للأذونات المهمة
+        if (await Permission.manageExternalStorage.isDenied) {
+          final status = await Permission.manageExternalStorage.request();
+          if (status.isPermanentlyDenied) {
+            _showPermissionDialog();
+            return;
+          }
+        }
+
+        // طلب أذونات إضافية لـ Android 13+
+        if (Platform.isAndroid) {
+          await [
+            Permission.videos,
+            Permission.audio,
+            Permission.photos,
+          ].request();
+        }
+      }
+
+      // فحص نهائي للأذونات المطلوبة
+      final storageStatus = await Permission.storage.status;
+      final manageStatus = await Permission.manageExternalStorage.status;
+
+      if (storageStatus.isDenied || manageStatus.isDenied) {
+        _showSnackBar('يرجى منح جميع الأذونات المطلوبة للتطبيق', isError: true);
+      } else {
+        _showSnackBar('تم منح الأذونات بنجاح', isError: false);
+      }
+    } catch (e) {
+      _showSnackBar('خطأ في طلب الأذونات: $e', isError: true);
     }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('أذونات مطلوبة'),
+        content: const Text(
+          'هذا التطبيق يحتاج لأذونات التخزين للعمل بشكل صحيح.\n'
+          'يرجى منح الأذونات من الإعدادات.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: const Text('فتح الإعدادات'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ===================== رفع المسلسل (Dio) =====================

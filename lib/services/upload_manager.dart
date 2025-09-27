@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -137,10 +138,48 @@ class UploadManager {
 
     final dio = Dio(
       BaseOptions(
-        connectTimeout: const Duration(seconds: 25),
-        sendTimeout: const Duration(minutes: 10),
-        receiveTimeout: const Duration(minutes: 2),
+        connectTimeout: const Duration(minutes: 2),
+        sendTimeout: const Duration(minutes: 30),
+        receiveTimeout: const Duration(minutes: 5),
         contentType: 'multipart/form-data',
+        headers: {
+          'User-Agent': 'DramaXBox-Admin/1.0',
+          'Accept': 'application/json',
+          'Connection': 'keep-alive',
+        },
+        followRedirects: true,
+        maxRedirects: 3,
+      ),
+    );
+
+    // إضافة interceptor للتعامل مع الأخطاء
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) async {
+          if (error.type == DioExceptionType.connectionTimeout ||
+              error.type == DioExceptionType.sendTimeout ||
+              error.type == DioExceptionType.receiveTimeout) {
+            // إعادة المحاولة مرة واحدة للـ timeout
+            try {
+              final response = await dio.request(
+                error.requestOptions.path,
+                data: error.requestOptions.data,
+                queryParameters: error.requestOptions.queryParameters,
+                options: Options(
+                  method: error.requestOptions.method,
+                  headers: error.requestOptions.headers,
+                  sendTimeout: const Duration(minutes: 40),
+                  receiveTimeout: const Duration(minutes: 10),
+                ),
+              );
+              handler.resolve(response);
+              return;
+            } catch (_) {
+              // If retry fails, continue with original error
+            }
+          }
+          handler.next(error);
+        },
       ),
     );
     try {
@@ -353,27 +392,104 @@ class UploadManager {
     required String filePath,
   }) async {
     final file = File(filePath);
-    if (!await file.exists()) throw Exception('ملف الحلقة مفقود');
-    final form = FormData.fromMap({
-      'series_id': seriesId.toString(),
-      'episode_number': episodeNumber.toString(),
-      'title': 'حلقة $episodeNumber',
-      'video': await MultipartFile.fromFile(
-        file.path,
-        filename: file.uri.pathSegments.last,
-      ),
-    });
-    await dio.post(
-      'https://dramaxbox.bbs.tr/App/api.php?action=upload_episode',
-      data: form,
-      cancelToken: _cancelToken,
-      onSendProgress: (sent, total) {
-        if (total > 0) {
-          _snapshot = _snapshot.copyWith(currentEpisodeProgress: sent / total);
-          _emit();
+    if (!await file.exists()) throw Exception('ملف الحلقة مفقود: $filePath');
+
+    final fileSize = await file.length();
+    if (fileSize == 0) throw Exception('ملف الحلقة فارغ');
+
+    // التحقق من صلاحيات الوصول للملف
+    try {
+      await file.readAsBytes();
+    } catch (e) {
+      throw Exception('لا يمكن قراءة ملف الحلقة: $e');
+    }
+
+    int retryCount = 0;
+    const maxRetries = 5; // زيادة المحاولات للـ 502 المؤقتة
+
+    while (retryCount < maxRetries) {
+      try {
+        final form = FormData.fromMap({
+          'series_id': seriesId.toString(),
+          'episode_number': episodeNumber.toString(),
+          'title': 'حلقة $episodeNumber',
+          'video': await MultipartFile.fromFile(
+            file.path,
+            filename:
+                'episode_${episodeNumber}_${DateTime.now().millisecondsSinceEpoch}.mp4',
+          ),
+        });
+
+        final response = await dio.post(
+          'https://dramaxbox.bbs.tr/App/api.php?action=upload_episode',
+          data: form,
+          cancelToken: _cancelToken,
+          onSendProgress: (sent, total) {
+            if (total > 0) {
+              _snapshot = _snapshot.copyWith(
+                currentEpisodeProgress: sent / total,
+              );
+              _emit();
+            }
+          },
+        );
+
+        // التحقق من استجابة الخادم
+        final data = response.data is Map
+            ? response.data
+            : jsonDecode(response.data);
+        if (data['status'] != 'success') {
+          final errorMessage = data['message'] ?? 'فشل رفع الحلقة';
+          throw Exception('خطأ من الخادم: $errorMessage');
         }
-      },
-    );
+
+        // نجح الرفع، خروج من الحلقة
+        break;
+      } catch (e) {
+        retryCount++;
+        if (e is DioException) {
+          final code = e.response?.statusCode;
+          final dioType = e.type;
+          // أخطاء لا فائدة من إعادة المحاولة لها
+          if (code != null && code >= 400 && code < 500 && code != 429) {
+            if (code == 413) {
+              throw Exception(
+                'الحلقة كبيرة جداً (413). قلل المدة أو أعد ترميز الفيديو',
+              );
+            }
+            throw Exception(
+              'رفض الخادم (HTTP $code) لن يُعاد المحاولة: ${e.message}',
+            );
+          }
+          if (retryCount >= maxRetries) {
+            if (code == 502 || code == 503 || code == 504) {
+              throw Exception(
+                'فشل الخادم (HTTP $code) بعد عدة محاولات. حاول لاحقاً أو تحقق من إعدادات الخادم',
+              );
+            }
+            if (dioType == DioExceptionType.connectionTimeout) {
+              throw Exception(
+                'انتهت مهلة الاتصال بعد عدة محاولات – تأكد من الشبكة',
+              );
+            }
+            if (dioType == DioExceptionType.sendTimeout) {
+              throw Exception(
+                'مهلة الإرسال انتهت بعد عدة محاولات – الحجم أو السرعة بطيئة',
+              );
+            }
+            throw Exception(
+              'فشل رفع الحلقة بعد $maxRetries محاولات: ${e.toString()}',
+            );
+          }
+        } else if (retryCount >= maxRetries) {
+          throw Exception('فشل رفع الحلقة: ${e.toString()}');
+        }
+
+        // انتظار قبل المحاولة التالية (Exponential Backoff)
+        final backoffSeconds = pow(2, retryCount).toInt();
+        await Future.delayed(Duration(seconds: backoffSeconds));
+      }
+    }
   }
 
   void dispose() {
