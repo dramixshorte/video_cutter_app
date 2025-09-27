@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:video_cutter_app/screens/DashboardSettingsScreen.dart';
 import 'package:video_cutter_app/screens/VideoCutterScreen.dart';
 import 'package:video_cutter_app/screens/SeriesManagementScreen.dart';
-import 'package:video_cutter_app/services/background_upload_service.dart';
+
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -43,25 +43,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     _loadDashboardStats();
 
     // تهيئة الخدمات المعقدة بعد بدء التطبيق بنجاح
-    _initializeServicesLater();
+   
+   
   }
 
   /// تهيئة الخدمات بعد بدء التطبيق
-  Future<void> _initializeServicesLater() async {
-    // انتظار ثانيتين للتأكد من أن التطبيق بدأ بنجاح
-    await Future.delayed(const Duration(seconds: 2));
 
-    try {
-      print('بدء تهيئة الخدمات...');
-
-      // تهيئة خدمة الرفع في الخلفية
-      await BackgroundUploadService.initialize();
-      print('تم تهيئة خدمة الرفع بنجاح');
-    } catch (e) {
-      print('خطأ في تهيئة الخدمات: $e');
-      // عدم إيقاف التطبيق إذا فشلت تهيئة الخدمات
-    }
-  }
 
   @override
   void dispose() {

@@ -1,15 +1,19 @@
 import 'dart:io';
 
-import 'package:ffmpeg_kit_min_gpl/ffmpeg_kit.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:video_cutter_app/Other/network_speed_tester.dart';
-import 'package:video_cutter_app/Other/speedometers.dart';
-import 'package:video_cutter_app/services/background_upload_service.dart';
-import 'package:video_player/video_player.dart';
+import 'package:video_cutter_app/widgets/app_toast.dart';
+// Removed unused dio & convert imports after migrating to UploadManager
+import 'package:video_cutter_app/services/upload_manager.dart';
+import 'package:video_cutter_app/services/video_processing.dart';
+// NOTE: تم تعطيل ProDialog هنا لعزل سبب التجمّد في الحوارات المخصصة
+
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 class VideoCutterScreen extends StatefulWidget {
   const VideoCutterScreen({super.key});
@@ -19,278 +23,83 @@ class VideoCutterScreen extends StatefulWidget {
 }
 
 class _VideoCutterScreenState extends State<VideoCutterScreen> {
-  double _downloadSpeed = 0;
-  double _uploadSpeed = 0;
-  double _networkStrength = 0; // قيمة من 0 إلى 1
-  bool _isTestingSpeed = false;
-
-  String _speedTestStatus = 'انقر لقياس السرعة';
-
+  // حالة تخص فقط عملية القص المحلية (لا تشمل الرفع بعد نقل الرفع لـ UploadManager)
   bool _isProcessing = false;
-  bool _isUploading = false;
   String _status = 'اضغط لاختيار الفيديو';
   int _totalParts = 0;
-  int _currentPart = 0;
-  double _progress = 0;
+  double _progress = 0; // تقدم القص المحلي فقط
   String? _selectedVideoPath;
   final List<String> _generatedParts = [];
   String? _seriesName;
   String? _seriesImagePath;
+  String? _compressedSeriesImagePath;
+  int? _originalImageSize;
+  int? _compressedImageSize;
   int _selectedDuration = 120;
+  bool _randomMode = false; // وضع القص العشوائي (90-120 ثانية)
+  bool _isCleaning = false; // لمنع نقرات متعددة أثناء التنظيف
+  bool _dialogOpen = false; // منع فتح أكثر من حوار في نفس الوقت
+  int? _partsTarget; // عدد الأجزاء المتوقع (للوضع الثابت)
 
   final TextEditingController _seriesNameController = TextEditingController();
   final GlobalKey<ScaffoldMessengerState> _scaffoldKey =
       GlobalKey<ScaffoldMessengerState>();
 
-  final Map<String, int> durationOptions = {
+  // خيارات مدة القص (دقائق -> ثواني)
+  final Map<String, int> durationOptions = const {
+    'دقيقتان': 120,
     '3 دقائق': 180,
     '5 دقائق': 300,
     '7 دقائق': 420,
     '10 دقائق': 600,
-    '15 دقائق': 900,
-    'دقيقة واحدة': 60,
-    'دقيقتين': 120,
   };
 
-  @override
-  void initState() {
-    super.initState();
-    // بدء قياس السرعة تلقائياً عند فتح الشاشة
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeScreenSafely();
-    });
-  }
-
-  Future<void> _initializeScreenSafely() async {
-    try {
-      await _testInternetSpeed();
-    } catch (e) {
-      if (kDebugMode) {
-        print('خطأ في تهيئة قياس السرعة: $e');
-      }
-      setState(() {
-        _speedTestStatus = 'لم يتم قياس السرعة';
-        _isTestingSpeed = false;
-      });
-    }
-  }
-
-  Future<void> _testInternetSpeed() async {
-    if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
-
-    setState(() {
-      _isTestingSpeed = true;
-      _speedTestStatus = 'جاري قياس سرعة التحميل...';
-      _downloadSpeed = 0;
-      _uploadSpeed = 0;
-      _networkStrength = 0;
-    });
-
-    try {
-      // قياس سرعة التحميل
-      final downloadSpeed = await NetworkSpeedTester.testDownloadSpeed();
-
-      if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
-      setState(() {
-        _downloadSpeed = downloadSpeed;
-        _speedTestStatus = 'جاري قياس سرعة الرفع...';
-      });
-
-      // قياس سرعة الرفع
-      final uploadSpeed = await NetworkSpeedTester.testUploadSpeed();
-
-      if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
-      setState(() {
-        _uploadSpeed = uploadSpeed;
-        _speedTestStatus = 'تم قياس السرعة';
-        _isTestingSpeed = false;
-        _networkStrength = NetworkSpeedTester.calculateNetworkStrength(
-          _downloadSpeed,
-          _uploadSpeed,
-        );
-      });
-    } catch (e) {
-      if (kDebugMode) {
-        print('خطأ في قياس السرعة: $e');
-      }
-      if (!mounted) return; // تأكد من أن الشاشة ما زالت موجودة
-      setState(() {
-        _speedTestStatus = 'لم يتم قياس السرعة';
-        _isTestingSpeed = false;
-      });
-    }
-  }
-
   void _showSnackBar(String message, {bool isError = false}) {
-    _scaffoldKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.redAccent : Colors.teal,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    AppToast.show(
+      context,
+      message,
+      type: isError ? ToastType.error : ToastType.success,
     );
   }
 
   Future<void> _requestPermissions() async {
-    // طلب الأذونات الأساسية
-    List<Permission> permissions = [
+    final statuses = await [
       Permission.storage,
-      Permission.manageExternalStorage,
-      Permission.accessMediaLocation,
-    ];
-
-    // إضافة أذونات Android 13+ إذا كانت متاحة
-    if (await Permission.photos.status != PermissionStatus.permanentlyDenied) {
-      permissions.addAll([
-        Permission.photos,
-        Permission.videos,
-        Permission.audio,
-      ]);
-    }
-
-    // أذونات العمل في الخلفية والإشعارات
-    permissions.addAll([
-      Permission.notification,
-      Permission.ignoreBatteryOptimizations,
-    ]);
-
-    // طلب جميع الأذونات
-    Map<Permission, PermissionStatus> statuses = await permissions.request();
-
-    // التحقق من الأذونات المهمة
-    bool hasStoragePermission =
-        statuses[Permission.storage] == PermissionStatus.granted ||
-        statuses[Permission.manageExternalStorage] ==
-            PermissionStatus.granted ||
-        statuses[Permission.photos] == PermissionStatus.granted;
-
-    if (!hasStoragePermission) {
-      _showPermissionDialog();
+      Permission.photos,
+      Permission.mediaLibrary,
+    ].request();
+    if (statuses.values.any((s) => s.isDenied || s.isPermanentlyDenied)) {
+      _showSnackBar('يرجى منح الأذونات المطلوبة', isError: true);
     }
   }
 
-  void _showPermissionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2D2D44),
-        title: const Text(
-          'أذونات مطلوبة',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'التطبيق يحتاج لأذونات الوصول للملفات ليعمل بشكل صحيح.\n\nيرجى الموافقة على جميع الأذونات المطلوبة.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              openAppSettings();
-            },
-            child: const Text(
-              'فتح الإعدادات',
-              style: TextStyle(color: Color(0xFF6C63FF)),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _requestPermissions();
-            },
-            child: const Text(
-              'إعادة المحاولة',
-              style: TextStyle(color: Color(0xFF6C63FF)),
-            ),
-          ),
-        ],
+  // ===================== رفع المسلسل (Dio) =====================
+  Future<void> _uploadSeries() async {
+    if (_seriesName == null || _seriesName!.isEmpty) {
+      setState(() => _status = 'الرجاء إدخال اسم المسلسل');
+      _showSnackBar('الرجاء إدخال اسم المسلسل', isError: true);
+      return;
+    }
+    if (_seriesImagePath == null && _compressedSeriesImagePath == null) {
+      setState(() => _status = 'صورة المسلسل مطلوبة');
+      _showSnackBar('صورة المسلسل مطلوبة', isError: true);
+      return;
+    }
+    if (_generatedParts.isEmpty) {
+      setState(() => _status = 'لا توجد حلقات لرفعها');
+      _showSnackBar('لا توجد حلقات لرفعها', isError: true);
+      return;
+    }
+
+    // بدء الرفع عبر المدير العالمي (اللوحة العامة ستتابع التقدم)
+    UploadManager.instance.startUpload(
+      UploadRequest(
+        seriesName: _seriesName!,
+        imagePath: _compressedSeriesImagePath ?? _seriesImagePath,
+        episodePaths: List<String>.from(_generatedParts),
       ),
     );
-  }
-
-  Future<String> _getSaveDirectory() async {
-    try {
-      final dir = Directory('/storage/emulated/0/Download/VideoCutter');
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
-      return dir.path;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Directory Error: $e');
-      }
-      throw Exception('تعذر إنشاء مجلد الحفظ');
-    }
-  }
-
-  Future<double> _getVideoDuration(String path) async {
-    try {
-      final controller = VideoPlayerController.file(File(path));
-      await controller.initialize();
-      final duration = controller.value.duration;
-      await controller.dispose();
-      return duration.inSeconds.toDouble();
-    } catch (e) {
-      if (kDebugMode) {
-        print('Video Player Duration Error: $e');
-      }
-
-      try {
-        final session = await FFmpegKit.execute(
-          '-i "$path" -v quiet -show_entries format=duration -of default=noprint_wrappers=1:nokey=1',
-        );
-        final output = await session.getOutput();
-        return double.tryParse(output?.trim() ?? '0') ?? 0;
-      } catch (e) {
-        if (kDebugMode) {
-          print('FFmpeg Duration Error: $e');
-        }
-        throw Exception('تعذر قراءة مدة الفيديو');
-      }
-    }
-  }
-
-  Future<void> _cutVideoSegment({
-    required String inputPath,
-    required String outputPath,
-    required int start,
-    required int duration,
-  }) async {
-    try {
-      final command = [
-        '-y',
-        '-ss',
-        start.toString(),
-        '-i',
-        inputPath,
-        '-t',
-        duration.toString(),
-        '-c',
-        'copy',
-        '-avoid_negative_ts',
-        '1',
-        outputPath,
-      ];
-
-      if (kDebugMode) {
-        print('Executing: ffmpeg ${command.join(' ')}');
-      }
-
-      final session = await FFmpegKit.executeWithArguments(command);
-      final returnCode = await session.getReturnCode();
-
-      if (returnCode == null || !returnCode.isValueSuccess()) {
-        final logs = await session.getAllLogsAsString();
-        throw Exception('فشل قص الجزء: ${logs ?? 'خطأ غير معروف'}');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('FFmpeg Execution Error: $e');
-      }
-      rethrow;
-    }
+    _showSnackBar('تم بدء رفع المسلسل');
   }
 
   Future<void> _selectVideo() async {
@@ -327,10 +136,24 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
       );
 
       if (result != null && result.files.single.path != null) {
-        setState(() {
-          _seriesImagePath = result.files.single.path!;
-        });
-        _showSnackBar('تم اختيار صورة المسلسل');
+        final pickedPath = result.files.single.path!;
+        final file = File(pickedPath);
+        if (await file.exists()) {
+          _originalImageSize = await file.length();
+          final compressed = await _compressImage(pickedPath);
+          if (compressed != null) {
+            _compressedSeriesImagePath = compressed.path;
+            _compressedImageSize = await compressed.length();
+            _showSnackBar(
+              'تم ضغط الصورة (${(_compressedImageSize! / 1024).toStringAsFixed(1)} KB)',
+            );
+          } else {
+            _showSnackBar('تم اختيار الصورة بدون ضغط');
+          }
+          setState(() {
+            _seriesImagePath = pickedPath; // احتفاظ بالمسار الأصلي للعرض
+          });
+        }
       }
     } catch (e) {
       setState(() => _status = 'خطأ في اختيار الصورة: $e');
@@ -338,558 +161,258 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     }
   }
 
+  Future<File?> _compressImage(String inputPath) async {
+    try {
+      final ext = p.extension(inputPath).toLowerCase();
+      final tempDir = await getTemporaryDirectory();
+      final outPath = p.join(
+        tempDir.path,
+        'series_cover_compressed_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      final xfile = await FlutterImageCompress.compressAndGetFile(
+        inputPath,
+        outPath,
+        quality: 70,
+        format: ext == '.png' ? CompressFormat.png : CompressFormat.jpeg,
+        minWidth: 600,
+        minHeight: 600,
+      );
+      if (xfile == null) return null;
+      return File(xfile.path);
+    } catch (e) {
+      if (kDebugMode) print('Compression error: $e');
+      return null;
+    }
+  }
+
   Future<void> _startProcessing() async {
+    // لا نحذف القديم تلقائياً حسب طلبك، فقط نبدأ فوقه. يمكن للمستخدم تنظيفه يدوياً.
     if (_selectedVideoPath == null) {
       setState(() => _status = 'لم يتم اختيار فيديو');
       _showSnackBar('الرجاء اختيار فيديو أولاً', isError: true);
       return;
     }
+    setState(() {
+      _isProcessing = true;
+      _status = 'جاري التحضير...';
+      _progress = 0;
+      _generatedParts.clear();
+    });
+    _partsTarget = null;
 
-    try {
-      setState(() {
-        _isProcessing = true;
-        _status = 'جاري التحضير...';
-        _progress = 0;
-        _generatedParts.clear();
-      });
+    Future<void> runProcessing() async {
+      final result = _randomMode
+          ? await VideoProcessor.instance.processRandom(
+              inputPath: _selectedVideoPath!,
+              minSeconds: 90,
+              maxSeconds: 120,
+              onPartComplete: (idx, total) {
+                if (!mounted) return;
+                setState(() {
+                  if (total != null) _partsTarget = total;
+                  // idx يبدأ من 1 في المعالج العادي، وفي العشوائي قد يكون 0 فنعالجه
+                  final partIndex = idx <= 0 ? 1 : idx;
+                  final totalParts =
+                      _partsTarget ??
+                      total ??
+                      (_randomMode
+                          ? (partIndex + 2)
+                          : partIndex); // تقدير بسيط للعشوائي
+                  _status = _randomMode
+                      ? 'قص جزء عشوائي رقم $partIndex'
+                      : 'قص الجزء $partIndex من $totalParts';
+                  if (totalParts > 0) {
+                    _progress = partIndex / totalParts;
+                    if (_progress > 1) _progress = 1;
+                  } else {
+                    _progress = 0.05 * partIndex; // تقدير مبسط للعشوائي
+                    if (_progress > 0.9) _progress = 0.9;
+                  }
+                });
+              },
+            )
+          : await VideoProcessor.instance.process(
+              inputPath: _selectedVideoPath!,
+              segmentSeconds: _selectedDuration,
+              onPartComplete: (idx, total) {
+                if (!mounted) return;
+                setState(() {
+                  _partsTarget = total;
+                  final partIndex = idx; // هنا يبدأ من 1
+                  final totalParts = total ?? partIndex;
+                  _status = 'قص الجزء $partIndex من $totalParts';
+                  _progress = totalParts > 0 ? partIndex / totalParts : 0;
+                });
+              },
+            );
 
-      final file = File(_selectedVideoPath!);
-      if (!await file.exists()) {
-        throw Exception('الملف غير موجود');
-      }
-
-      final saveDir = await _getSaveDirectory();
-      final duration = await _getVideoDuration(_selectedVideoPath!);
-
-      if (duration <= 0) {
-        throw Exception('مدة الفيديو غير صالحة');
-      }
-
-      final segmentDuration = _selectedDuration;
-      _totalParts = (duration / segmentDuration).ceil();
-
-      setState(() => _status = 'جاري معالجة الفيديو...');
-      _showSnackBar('بدأت عملية قص الفيديو إلى أجزاء');
-
-      for (int i = 0; i < _totalParts; i++) {
-        final start = i * segmentDuration;
-        final remaining = duration - start;
-        final currentDuration = remaining < segmentDuration
-            ? remaining
-            : segmentDuration;
-
-        final outputPath =
-            '${saveDir.trim()}/part_${i + 1}.mp4'; // إزالة المسافات من المسار فقط
+      if (!mounted) return;
+      if (result.success) {
         setState(() {
-          _currentPart = i + 1;
-          _progress = _currentPart / _totalParts;
-          _status = 'جاري قص الجزء $_currentPart/$_totalParts';
+          _generatedParts.addAll(result.parts);
+          _totalParts = result.parts.length;
+          _isProcessing = false;
+          _progress = 1;
+          _status = 'تم الانتهاء! $_totalParts أجزاء جاهزة';
         });
-
-        await _cutVideoSegment(
-          inputPath: _selectedVideoPath!,
-          outputPath: outputPath,
-          start: start,
-          duration: currentDuration.toInt(),
-        );
-
-        _generatedParts.add(outputPath);
-      }
-
-      setState(() {
-        _status = 'تم الانتهاء! $_totalParts أجزاء في مجلد التنزيلات';
-        _isProcessing = false;
-      });
-      _showSnackBar('تم قص الفيديو بنجاح إلى $_totalParts أجزاء');
-    } catch (e) {
-      setState(() {
-        _status = 'حدث خطأ: ${e.toString()}';
-        _isProcessing = false;
-      });
-      _showSnackBar('حدث خطأ أثناء قص الفيديو: ${e.toString()}', isError: true);
-      if (kDebugMode) {
-        print('Processing Error: $e');
+        _showSnackBar('تم القص بنجاح');
+      } else {
+        setState(() {
+          _isProcessing = false;
+          _status = 'فشل القص: ${result.error}';
+        });
+        _showSnackBar(result.error ?? 'فشل غير معروف', isError: true);
       }
     }
+
+    // تنفيذ منفصل لتجنب حجب الواجهة
+    Future.microtask(runProcessing);
   }
 
-  Future<void> _uploadSeries() async {
-    if (_seriesName == null || _seriesName!.isEmpty) {
-      setState(() => _status = 'الرجاء إدخال اسم المسلسل');
-      _showSnackBar('الرجاء إدخال اسم المسلسل', isError: true);
-      return;
-    }
-
-    if (_generatedParts.isEmpty) {
-      setState(() => _status = 'لا توجد حلقات لرفعها');
-      _showSnackBar('لا توجد حلقات لرفعها', isError: true);
-      return;
-    }
-
-    try {
-      setState(() {
-        _isUploading = true;
-        _status = 'بدء الرفع في الخلفية...';
-        _progress = 0;
-      });
-
-      // تحضير قائمة الحلقات للرفع الخلفي
-      List<Map<String, dynamic>> episodesData = [];
-      for (int i = 0; i < _generatedParts.length; i++) {
-        episodesData.add({
-          'videoPath': _generatedParts[i],
-          'title': '$_seriesName - الحلقة ${i + 1}',
-          'description': 'الحلقة رقم ${i + 1} من مسلسل $_seriesName',
-          'season': '1',
-          'episode_number': i + 1,
-        });
-      }
-
-      // بدء الرفع الخلفي باستخدام BackgroundUploadService
+  Future<int> _cleanCurrentGeneratedParts() async {
+    int removed = 0;
+    for (final path in List<String>.from(_generatedParts)) {
       try {
-        await BackgroundUploadService.startSeriesUpload(
-          seriesName: _seriesName!,
-          seriesDescription:
-              'مسلسل $_seriesName مقطع إلى ${_generatedParts.length} حلقة',
-          seriesImagePath: _seriesImagePath ?? '',
-          episodes: episodesData,
-          category: 'دراما',
-          year: DateTime.now().year.toString(),
-        );
-
-        setState(() {
-          _status = 'تم بدء الرفع في الخلفية! ✅';
-          _isUploading = false;
-          _progress = 1;
-        });
-
-        _showSnackBar(
-          'تم بدء رفع المسلسل في الخلفية! سيتم الرفع تلقائياً حتى لو أغلقت التطبيق',
-        );
-      } catch (backgroundUploadError) {
-        if (kDebugMode) {
-          print('خطأ في بدء الرفع الخلفي: $backgroundUploadError');
+        final f = File(path);
+        if (await f.exists()) {
+          await f.delete();
+          removed++;
         }
+      } catch (_) {}
+    }
+    if (removed > 0) {
+      setState(() {
+        _generatedParts.clear();
+        _totalParts = 0;
+        _status = 'تم تنظيف الأجزاء المحلية';
+      });
+    }
+    // استدعاء مدير الرفع لتنظيف المسارات المحتفظة داخلياً (اختياري)
+    await UploadManager.instance.cleanLocalEpisodes();
+    return removed;
+  }
 
-        // في حالة فشل الرفع الخلفي، إظهار رسالة بديلة
-        setState(() {
-          _status = 'تم إعداد الرفع - يمكنك المتابعة';
-          _isUploading = false;
-          _progress = 1;
-        });
-
-        _showSnackBar('تم إعداد المسلسل للرفع. يمكنك متابعة استخدام التطبيق.');
+  Future<int> _cleanAllPartFilesInDirectory() async {
+    int removed = 0;
+    try {
+      final dir = await VideoProcessor.getOutputDirectory();
+      if (await dir.exists()) {
+        final files = dir.listSync().whereType<File>().where(
+          (f) =>
+              f.path.toLowerCase().contains('part_') && f.path.endsWith('.mp4'),
+        );
+        for (final f in files) {
+          try {
+            await f.delete();
+            removed++;
+          } catch (_) {}
+        }
       }
+    } catch (_) {}
+    if (removed > 0) {
+      setState(() {
+        _generatedParts.clear();
+        _totalParts = 0;
+        _status = 'تم حذف كل الأجزاء من المجلد';
+      });
+    }
+    await UploadManager.instance.cleanLocalEpisodes();
+    return removed;
+  }
 
-      // إظهار رسالة تأكيد مع معلومات الرفع الخلفي
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF2D2D44),
-          title: Row(
-            children: [
-              const Icon(
-                Icons.cloud_upload,
-                color: Color(0xFF4CAF50),
-                size: 28,
+  void _showDurationDialog() async {
+    if (_dialogOpen) return;
+    _dialogOpen = true;
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setInner) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF222233),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'تم بدء الرفع! 🎉',
-                style: TextStyle(color: Colors.white, fontSize: 20),
+              title: const Text(
+                'إعداد مدة الأجزاء',
+                style: TextStyle(color: Colors.white),
               ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'المسلسل: $_seriesName',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'عدد الحلقات: ${_generatedParts.length}',
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4CAF50).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFF4CAF50).withOpacity(0.3),
-                  ),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info, color: Color(0xFF4CAF50), size: 16),
-                        SizedBox(width: 8),
-                        Text(
-                          'معلومات مهمة:',
+                    SwitchListTile(
+                      value: _randomMode,
+                      contentPadding: EdgeInsets.zero,
+                      activeThumbColor: Colors.amber,
+                      title: Text(
+                        'قص عشوائي (90-120 ثانية)',
+                        style: TextStyle(
+                          color: _randomMode ? Colors.amber : Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        _randomMode
+                            ? 'سيتم إنشاء أطوال متغيرة لكل جزء'
+                            : 'مغلق: اختر مدة ثابتة أدناه',
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                      onChanged: (v) {
+                        setState(() => _randomMode = v);
+                        setInner(() {});
+                      },
+                    ),
+                    const Divider(color: Colors.white24),
+                    ...durationOptions.entries.map((e) {
+                      final sel = _selectedDuration == e.value;
+                      return ListTile(
+                        dense: true,
+                        enabled: !_randomMode,
+                        title: Text(
+                          e.key,
                           style: TextStyle(
-                            color: Color(0xFF4CAF50),
-                            fontWeight: FontWeight.bold,
+                            color: sel ? Colors.white : Colors.white70,
+                            fontWeight: sel ? FontWeight.bold : FontWeight.w500,
                           ),
                         ),
-                      ],
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '• سيتم رفع المسلسل تلقائياً في الخلفية',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                    Text(
-                      '• يمكنك إغلاق التطبيق والرفع سيستمر',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                    Text(
-                      '• ستحصل على إشعارات بتقدم الرفع',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                    Text(
-                      '• في حالة انقطاع الإنترنت، سيُعاود الرفع تلقائياً',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
+                        subtitle: Text(
+                          'مدة: ${e.value ~/ 60} دقيقة',
+                          style: const TextStyle(color: Colors.white38),
+                        ),
+                        trailing: sel
+                            ? const Icon(Icons.check, color: Colors.amber)
+                            : null,
+                        onTap: () {
+                          if (_randomMode) return;
+                          setState(() => _selectedDuration = e.value);
+                          Navigator.pop(context);
+                          _dialogOpen = false;
+                        },
+                      );
+                    }),
                   ],
                 ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // تنظيف البيانات بعد بدء الرفع الخلفي
-                setState(() {
-                  _seriesName = null;
-                  _seriesImagePath = null;
-                  _seriesNameController.clear();
-                  // عدم حذف _generatedParts حتى اكتمال الرفع
-                });
-              },
-              child: const Text(
-                'تمام',
-                style: TextStyle(color: Color(0xFF4CAF50), fontSize: 16),
-              ),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      debugPrint('خطأ أثناء بدء رفع المسلسل: $e');
-      setState(() {
-        _status = 'حدث خطأ: ${e.toString()}';
-        _isUploading = false;
-      });
-
-      _showSnackBar(
-        'حدث خطأ أثناء بدء رفع المسلسل: ${e.toString()}',
-        isError: true,
-      );
-    }
-  }
-
-  void _showDurationDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: 400,
-              maxHeight: MediaQuery.of(context).size.height * 0.7,
-            ),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1E1E2E), Color(0xFF2D2D44)],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: const Color(0xFF6C63FF).withOpacity(0.3),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF6C63FF), Color(0xFF4845D2)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.timer,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'اختر مدة كل جزء',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'اختر المدة المناسبة لتقطيع الفيديو',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-                // Options
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.all(20),
-                    itemCount: durationOptions.length,
-                    itemBuilder: (context, index) {
-                      final option = durationOptions.keys.elementAt(index);
-                      final duration = durationOptions[option]!;
-                      final isSelected = _selectedDuration == duration;
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _selectedDuration = duration;
-                              });
-                              Navigator.of(context).pop();
-                            },
-                            borderRadius: BorderRadius.circular(16),
-                            child: Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: isSelected
-                                      ? [
-                                          const Color(
-                                            0xFF6C63FF,
-                                          ).withOpacity(0.2),
-                                          const Color(
-                                            0xFF4845D2,
-                                          ).withOpacity(0.1),
-                                        ]
-                                      : [
-                                          Colors.white.withOpacity(0.05),
-                                          Colors.white.withOpacity(0.02),
-                                        ],
-                                ),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? const Color(0xFF6C63FF)
-                                      : Colors.white.withOpacity(0.1),
-                                  width: isSelected ? 2 : 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? const Color(
-                                              0xFF6C63FF,
-                                            ).withOpacity(0.2)
-                                          : Colors.white.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Icon(
-                                      isSelected
-                                          ? Icons.check_circle
-                                          : Icons.timer,
-                                      color: isSelected
-                                          ? const Color(0xFF6C63FF)
-                                          : Colors.white70,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          option,
-                                          style: TextStyle(
-                                            color: isSelected
-                                                ? const Color(0xFF6C63FF)
-                                                : Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'مدة: ${duration ~/ 60} دقيقة',
-                                          style: TextStyle(
-                                            color: Colors.white.withOpacity(
-                                              0.7,
-                                            ),
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (isSelected)
-                                    Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF6C63FF),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Icon(
-                                        Icons.check,
-                                        color: Colors.white,
-                                        size: 12,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                // Footer
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'إلغاء',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6C63FF),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 5,
-                            shadowColor: const Color(
-                              0xFF6C63FF,
-                            ).withOpacity(0.4),
-                          ),
-                          child: const Text(
-                            'تطبيق',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _dialogOpen = false;
+                  },
+                  child: const Text(
+                    'إغلاق',
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         );
       },
     );
-  }
-
-  Future<void> _deleteLocalEpisodes() async {
-    try {
-      for (final episodePath in _generatedParts) {
-        try {
-          final file = File(episodePath);
-          if (await file.exists()) {
-            await file.delete();
-            if (kDebugMode) {
-              print('تم حذف الحلقة المحلية: $episodePath');
-            }
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('خطأ في حذف الحلقة $episodePath: $e');
-          }
-        }
-      }
-      _generatedParts.clear();
-    } catch (e) {
-      if (kDebugMode) {
-        print('خطأ عام في حذف الحلقات: $e');
-      }
-      rethrow;
-    }
+    _dialogOpen = false;
   }
 
   void _showSeriesDialog() {
@@ -952,6 +475,10 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
                         ),
                       ),
                     ),
+                  if (_seriesImagePath != null) ...[
+                    const SizedBox(height: 12),
+                    _buildImagePreview(),
+                  ],
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -1011,17 +538,53 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
             icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.timer_outlined, color: Colors.white),
+              tooltip: 'إعداد مدة الأجزاء / عشوائي',
+              onPressed: () {
+                if (_isProcessing) return;
+                _showDurationDialog();
+              },
+            ),
+            GestureDetector(
+              onLongPress: _isCleaning
+                  ? null
+                  : () async {
+                      setState(() => _isCleaning = true);
+                      final removed = await _cleanAllPartFilesInDirectory();
+                      if (!mounted) return;
+                      setState(() => _isCleaning = false);
+                      _showSnackBar(
+                        removed > 0
+                            ? 'تم حذف $removed ملف (كامل)'
+                            : 'لا توجد ملفات للحذف الكامل',
+                      );
+                    },
+              child: IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.white),
+                tooltip: 'حذف الأجزاء الحالية (اضغط مطول للحذف الكامل)',
+                onPressed: _isCleaning
+                    ? null
+                    : () async {
+                        setState(() => _isCleaning = true);
+                        final removed = await _cleanCurrentGeneratedParts();
+                        if (!mounted) return;
+                        setState(() => _isCleaning = false);
+                        _showSnackBar(
+                          removed > 0
+                              ? 'تم حذف $removed ملف'
+                              : 'لا توجد ملفات لحذفها',
+                        );
+                      },
+              ),
+            ),
             if (_generatedParts.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.upload, color: Colors.white),
                 onPressed: _showSeriesDialog,
                 tooltip: 'رفع المسلسل',
               ),
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              onPressed: _isTestingSpeed ? null : _testInternetSpeed,
-              tooltip: 'إعادة قياس السرعة',
-            ),
+
             const SizedBox(width: 8),
           ],
         ),
@@ -1040,14 +603,19 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildWelcomeHeader(),
+                  const SizedBox(height: 16),
+
                   const SizedBox(height: 24),
                   _buildVideoSelectionCard(),
                   const SizedBox(height: 20),
-                  _buildSpeedTestSection(),
+
                   const SizedBox(height: 20),
                   _buildSettingsCard(),
                   const SizedBox(height: 20),
-                  if (_isProcessing || _isUploading) _buildProgressSection(),
+                  if (kIsWeb) _buildWebExportPlaceholder(),
+                  if (kIsWeb) const SizedBox(height: 20),
+                  if (_isProcessing) _buildProcessingSection(),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -1210,64 +778,6 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
     );
   }
 
-  Widget _buildSpeedTestSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF9800).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.speed,
-                  color: Color(0xFFFF9800),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'اختبار سرعة الإنترنت',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Speedometers(
-            downloadSpeed: _downloadSpeed,
-            uploadSpeed: _uploadSpeed,
-            networkStrength: _networkStrength,
-            isTesting: _isTestingSpeed,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _speedTestStatus,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _isTestingSpeed ? const Color(0xFFFF9800) : Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSettingsCard() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -1319,48 +829,9 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white.withOpacity(0.1)),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF9800).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.timer,
-                    color: Color(0xFFFF9800),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'مدة كل جزء',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        '${_selectedDuration ~/ 60} دقائق',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.white70),
-                  onPressed: _showDurationDialog,
-                ),
-              ],
+            child: const Text(
+              'اختر مدة الأجزاء من الشريط العلوي (الأيقونة بجانب الرفع).',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ),
           const SizedBox(height: 20),
@@ -1393,52 +864,14 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
               ),
             ),
           ),
-          if (_generatedParts.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () async {
-                  await _deleteLocalEpisodes();
-                  setState(() {
-                    _status = 'تم حذف الحلقات المحلية';
-                    _generatedParts.clear();
-                  });
-                  _showSnackBar('تم حذف جميع الحلقات المحلية');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE53E3E),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 5,
-                  shadowColor: const Color(0xFFE53E3E).withOpacity(0.4),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.delete_forever, size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'حذف الحلقات من الجهاز',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          if (_generatedParts.isNotEmpty) ...[const SizedBox(height: 16)],
         ],
       ),
     );
   }
 
-  Widget _buildProgressSection() {
+  // قسم عرض تقدم عملية القص فقط (الرفع يعرض في اللوحة العامة)
+  Widget _buildProcessingSection() {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1463,16 +896,16 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
                   color: const Color(0xFF6C63FF).withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  _isUploading ? Icons.cloud_upload : Icons.content_cut,
-                  color: const Color(0xFF6C63FF),
+                child: const Icon(
+                  Icons.content_cut,
+                  color: Color(0xFF6C63FF),
                   size: 20,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  _isUploading ? 'جاري الرفع...' : 'جاري المعالجة...',
+                  'جاري المعالجة...',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -1514,6 +947,89 @@ class _VideoCutterScreenState extends State<VideoCutterScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Placeholder section for the web build explaining export status.
+  Widget _buildWebExportPlaceholder() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF03A9F4).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.web, color: Color(0xFF03A9F4), size: 28),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'دعم الويب (تنزيل الأجزاء)',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'القص المحلي غير متاح حالياً على الويب. سيتم قريباً إضافة إحدى الطريقتين:\n• دمج ffmpeg.wasm للمعالجة داخل المتصفح\n• أو استدعاء API خادم يعيد روابط محتوى جاهزة\n\nبعد تنفيذ إحدى الطريقتين سيظهر زر تنزيل الحلقات مباشرة.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImagePreview() {
+    final path = _compressedSeriesImagePath ?? _seriesImagePath;
+    if (path == null) return const SizedBox.shrink();
+    final originalKb = _originalImageSize != null
+        ? (_originalImageSize! / 1024).toStringAsFixed(1)
+        : null;
+    final compressedKb = _compressedImageSize != null
+        ? (_compressedImageSize! / 1024).toStringAsFixed(1)
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(
+            File(path),
+            width: double.infinity,
+            height: 180,
+            fit: BoxFit.cover,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (originalKb != null)
+          Text(
+            compressedKb != null
+                ? 'الحجم: قبل $originalKb KB | بعد $compressedKb KB'
+                : 'الحجم: $originalKb KB',
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+      ],
     );
   }
 }

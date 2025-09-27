@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:video_cutter_app/widgets/app_toast.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
@@ -68,13 +69,10 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
-    _scaffoldKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.redAccent : Colors.teal,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    AppToast.show(
+      context,
+      message,
+      type: isError ? ToastType.error : ToastType.success,
     );
   }
 

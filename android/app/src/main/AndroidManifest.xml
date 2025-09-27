@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- أذونات التخزين الأساسية -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
@@ -68,6 +69,13 @@
             android:name="de.julianassmann.flutter_background.IsolateHolderService"
             android:exported="false"
             android:foregroundServiceType="dataSync|specialUse"/>
+        <!-- تعيين خدمة Flutter Background Service الرئيسية بأنواع الـ Foreground المطلوبة (Android 14+ / targetSdk 34+) -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:exported="true"
+            android:foregroundServiceType="dataSync|mediaPlayback|specialUse"
+            android:stopWithTask="false"
+            tools:replace="android:exported,android:foregroundServiceType" />
     
     
 

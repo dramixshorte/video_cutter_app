@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:video_cutter_app/widgets/app_toast.dart';
 
 class AuthDialog {
   static Future<bool> showPasswordDialog(BuildContext context) async {
@@ -293,26 +294,10 @@ class AuthDialog {
       Navigator.of(context).pop(true);
     } else {
       // إظهار رسالة خطأ
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.white),
-              SizedBox(width: 12),
-              Text(
-                'كلمة مرور خاطئة. حاول مرة أخرى.',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFE53E3E),
-          duration: const Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
+      AppToast.show(
+        context,
+        'كلمة مرور خاطئة. حاول مرة أخرى.',
+        type: ToastType.error,
       );
     }
   }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:video_cutter_app/widgets/app_toast.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 import 'SeriesEditScreen.dart';
 import 'SeriesEpisodesScreen.dart';
 
@@ -20,6 +22,20 @@ class _SeriesManagementScreenState extends State<SeriesManagementScreen>
   late AnimationController _animationController;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce; // NEW: debounce timer
+
+  // Arabic normalization
+  String _normalize(String input) {
+    var s = input;
+    s = s.replaceAll(RegExp('[\u064B-\u0652]'), ''); // remove harakat
+    s = s.replaceAll('ـ', ''); // tatweel
+    s = s.replaceAll(RegExp('[إأآا]'), 'ا');
+    s = s.replaceAll('ى', 'ي');
+    s = s.replaceAll('ؤ', 'و');
+    s = s.replaceAll('ئ', 'ي');
+    s = s.replaceAll('ة', 'ه');
+    return s.toLowerCase().trim();
+  }
 
   @override
   void initState() {
@@ -28,11 +44,25 @@ class _SeriesManagementScreenState extends State<SeriesManagementScreen>
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
+    _searchController.addListener(_onSearchChanged); // listen changes
     _loadSeries();
+  }
+
+  void _onSearchChanged() {
+    final text = _searchController.text;
+    if (text == _searchQuery) return;
+    _searchQuery = text;
+    _debounce?.cancel();
+    _debounce = Timer(
+      const Duration(milliseconds: 250),
+      () => _filterSeries(_searchQuery),
+    );
+    setState(() {}); // update clear button
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _animationController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -40,32 +70,34 @@ class _SeriesManagementScreenState extends State<SeriesManagementScreen>
 
   Future<void> _loadSeries() async {
     setState(() => _isLoading = true);
-
     try {
       final response = await http.post(
         Uri.parse('https://dramaxbox.bbs.tr/App/api.php?action=get_series'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({}),
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['status'] == 'success') {
+          final mapped = data['series'].map<Map<String, dynamic>>((series) {
+            return {
+              'id': series['id'],
+              'name': series['name'],
+              'image_path': series['image_path'],
+              'poster_url':
+                  'https://dramaxbox.bbs.tr/App/series_images/${series['image_path']}',
+              'episodes_count': series['episodes_count'] ?? 0,
+              'status': 'active',
+              'description': '${series['name']} - مسلسل متاح للمشاهدة',
+            };
+          }).toList();
           setState(() {
-            // تحويل البيانات إلى التنسيق المطلوب
-            _series = data['series'].map<Map<String, dynamic>>((series) {
-              return {
-                'id': series['id'],
-                'name': series['name'],
-                'image_path': series['image_path'],
-                'poster_url':
-                    'https://dramaxbox.bbs.tr/App/series_images/${series['image_path']}',
-                'episodes_count': series['episodes_count'] ?? 0,
-                'status': 'active',
-                'description': '${series['name']} - مسلسل متاح للمشاهدة',
-              };
-            }).toList();
-            _filteredSeries = _series;
+            _series = mapped;
+            if (_searchQuery.trim().isEmpty) {
+              _filteredSeries = _series;
+            } else {
+              _filterSeries(_searchQuery, internalCall: true);
+            }
             _isLoading = false;
           });
           _animationController.forward();
@@ -81,35 +113,30 @@ class _SeriesManagementScreenState extends State<SeriesManagementScreen>
     }
   }
 
-  void _filterSeries(String query) {
+  void _filterSeries(String query, {bool internalCall = false}) {
+    final raw = query;
+    final q = _normalize(raw);
     setState(() {
-      _searchQuery = query;
-      if (query.isEmpty) {
+      if (q.isEmpty) {
         _filteredSeries = _series;
       } else {
         _filteredSeries = _series.where((series) {
-          final name = series['name']?.toString().toLowerCase() ?? '';
-          final description =
-              series['description']?.toString().toLowerCase() ?? '';
-          final searchLower = query.toLowerCase();
-          return name.contains(searchLower) ||
-              description.contains(searchLower);
+          final name = _normalize(series['name']?.toString() ?? '');
+          final description = _normalize(
+            series['description']?.toString() ?? '',
+          );
+          return name.contains(q) || description.contains(q);
         }).toList();
       }
+      if (!internalCall) _searchQuery = raw; // keep original text
     });
   }
 
   void _showMessage(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.white)),
-        backgroundColor: isError
-            ? const Color(0xFFE53E3E)
-            : const Color(0xFF4CAF50),
-        duration: Duration(seconds: isError ? 4 : 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    AppToast.show(
+      context,
+      message,
+      type: isError ? ToastType.error : ToastType.success,
     );
   }
 
@@ -168,10 +195,10 @@ class _SeriesManagementScreenState extends State<SeriesManagementScreen>
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'type': 'series',
-          'series_id': series['id']?.toString() ?? '',
-          'title': series['name'] ?? 'مسلسل جديد',
+          'series_id': series['id'],
+          'title': series['name'],
           'body': 'مسلسل جديد متاح الآن للمشاهدة!',
-          'image': series['poster_url'] ?? '',
+          'image': series['poster_url'],
         }),
       );
 
@@ -477,7 +504,7 @@ class _SeriesManagementScreenState extends State<SeriesManagementScreen>
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: TextField(
         controller: _searchController,
-        onChanged: _filterSeries,
+        // removed onChanged direct call, handled by listener with debounce
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           hintText: 'البحث في المسلسلات...',

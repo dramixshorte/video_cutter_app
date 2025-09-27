@@ -1,0 +1,43 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6C63FF"/>
+      <stop offset="60%" stop-color="#5145FF"/>
+      <stop offset="100%" stop-color="#3A36E8"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF3D7F"/>
+      <stop offset="100%" stop-color="#FFA14E"/>
+    </linearGradient>
+    <filter id="innerShadow" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feOffset dx="0" dy="4"/>
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feComposite in="SourceAlpha" in2="blur" operator="arithmetic" k2="-1" k3="1" result="inv"/>
+      <feColorMatrix in="inv" type="matrix" values="0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.25  0 0 0 0.6 0"/>
+      <feBlend in="SourceGraphic"/>
+    </filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="colored"/>
+      <feMerge>
+        <feMergeNode in="colored" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Shield -->
+  <path filter="url(#innerShadow)" fill="url(#bgGrad)" d="M256 32c-14 0-28 3.4-41.5 10.2l-96 48C90 103.9 72 134.2 72 167.3V288c0 95.2 61.2 181.9 152.4 212.4 20.9 7.1 43.3 7.1 64.2 0C379 469.9 440 383.2 440 288V167.3c0-33.1-18-63.4-46.5-77.1l-96-48C284 35.4 270 32 256 32Z"/>
+  <path fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="4" d="M256 44c-11.8 0-23.6 2.9-35 8.6l-96 48c-23.2 11.5-37.8 35-37.8 61V288c0 87.6 56.4 167.3 140.4 195.9 17.7 6 36.7 6 54.4 0C365.9 455.3 422 375.6 422 288V161.6c0-26-14.6-49.5-37.8-61l-96-48C279.6 46.9 267.8 44 256 44Z"/>
+  <!-- Play triangle -->
+  <path fill="#FFFFFF" fill-opacity="0.95" d="M228 186c0-6.5 3.4-12.5 9-15.8 5.5-3.3 12.4-3.5 18-.4l108 60.2c6 3.4 9.7 9.6 9.7 16.4 0 6.8-3.7 13-9.7 16.4l-108 60.2c-5.6 3.1-12.5 2.9-18-.4-5.6-3.3-9-9.3-9-15.8V186Z"/>
+  <!-- Gear -->
+  <g transform="translate(352 320) scale(1.05)">
+    <circle r="46" fill="url(#accentGrad)" filter="url(#glow)"/>
+    <circle r="30" fill="rgba(0,0,0,0.25)"/>
+    <g fill="white">
+      <path d="M0-28l6 4 11-4 6 10-8 9 2 7 12 5v12l-12 5-2 7 8 9-6 10-11-4-6 4-6-4-11 4-6-10 8-9-2-7-12-5v-12l12-5 2-7-8-9 6-10 11 4 6-4 6 4z"/>
+      <circle r="12" fill="#6C63FF" />
+    </g>
+  </g>
+  <!-- Accent dash -->
+  <path d="M120 360c48 28 224 28 272 0" stroke="url(#accentGrad)" stroke-width="10" stroke-linecap="round" stroke-dasharray="18 26" opacity="0.65"/>
+</svg>

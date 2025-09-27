@@ -2094,14 +2094,12 @@ function updateSeries($conn) {
     }
 }
 
-// وظيفة إرسال الإشعارات للمسلسلات
+// وظيفة إرسال الإشعارات
 function sendNotification($conn) {
     global $messaging;
     
     try {
         $input = json_decode(file_get_contents('php://input'), true);
-        
-        logActivity("تم استلام طلب إرسال إشعار: " . json_encode($input));
         
         if (!isset($input['type']) || !isset($input['title'])) {
             echo json_encode(['status' => 'error', 'message' => 'بيانات غير مكتملة']);
@@ -2114,43 +2112,35 @@ function sendNotification($conn) {
         $image = $input['image'] ?? '';
         $series_id = $input['series_id'] ?? '';
         
-        // إنشاء البيانات للإشعار المتقدم
-        $notificationData = [
-            'type' => 'new_series', // نوع ثابت للمسلسلات
-            'series_id' => $series_id,
-            'series_title' => $title,
-            'series_description' => $body,
-            'image_url' => $image,
-            'timestamp' => date('Y-m-d H:i:s'),
-            'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
+        // إنشاء الإشعار
+        $notification = Notification::create($title, $body);
+        $message = CloudMessage::withTarget('topic', 'all_users')
+            ->withNotification($notification);
+        
+        // إضافة البيانات الإضافية
+        $data = [
+            'type' => $type,
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
         ];
         
-        // استخدام النظام الموثوق لإرسال الإشعار
-        $result = sendReliableNotification(
-            $messaging, 
-            '🎬 ' . $title, 
-            $body, 
-            $notificationData, 
-            $image
-        );
-        
-        if ($result['success']) {
-            logActivity("تم إرسال إشعار المسلسل بنجاح: " . $title . " (محاولات: " . $result['attempts'] . ")");
-            echo json_encode([
-                'status' => 'success', 
-                'message' => 'تم إرسال الإشعار بنجاح إلى جميع المستخدمين! 🎉',
-                'series_title' => $title,
-                'sent_to' => 'all_users',
-                'attempts' => $result['attempts']
-            ]);
-        } else {
-            logError("فشل إرسال إشعار المسلسل: " . $result['error']);
-            echo json_encode([
-                'status' => 'error', 
-                'message' => 'فشل في إرسال الإشعار: ' . $result['error'],
-                'attempts' => $result['attempts']
-            ]);
+        if (!empty($series_id)) {
+            $data['series_id'] = $series_id;
         }
+        
+        if (!empty($image)) {
+            $data['image'] = $image;
+        }
+        
+        $message = $message->withData($data);
+        
+        // إرسال الإشعار
+        $messaging->send($message);
+        
+        echo json_encode([
+            'status' => 'success', 
+            'message' => 'تم إرسال الإشعار بنجاح',
+            'sent_to' => 'all_users'
+        ]);
         
     } catch (Exception $e) {
         logError("sendNotification Error: " . $e->getMessage());

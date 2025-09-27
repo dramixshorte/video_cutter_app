@@ -49,6 +49,10 @@
   <string>نحتاج الميكروفون لتسجيل الصوت مع الفيديو</string>
   <key>NSPhotoLibraryUsageDescription</key>
   <string>نحتاج صلاحية الوصول للصور والفيديوهات من الاستوديو</string>
+  <key>NSPhotoLibraryAddUsageDescription</key>
+  <string>نحتاج حفظ الأجزاء المقطعة داخل الاستوديو</string>
+  <key>NSAppleMusicUsageDescription</key>
+  <string>قد نستخدم مكتبة الوسائط مستقبلاً</string>
   <key>NSDocumentsFolderUsageDescription</key>
   <string>نحتاج صلاحية حفظ ملفات الفيديو بعد التعديل</string>
 

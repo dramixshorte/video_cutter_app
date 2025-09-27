@@ -48,6 +48,8 @@ dependencies:
   path: ^1.8.2
   async: ^2.10.0
   chewie: ^1.13.0
+  flutter_image_compress: ^2.3.0
+  flutter_svg: ^2.0.10+1
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +62,9 @@ flutter:
 
   assets:
     - assets/icons/app_icon.png
+    - assets/icons/admin_logo.svg
+    - assets/icons/admin_emblem.svg
+    - assets/icons/app_logo_7.svg
 
 flutter_icons:
   android: true

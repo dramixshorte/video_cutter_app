@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:video_cutter_app/widgets/app_toast.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
@@ -44,16 +45,10 @@ class _SeriesEditScreenState extends State<SeriesEditScreen> {
   }
 
   void _showMessage(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.white)),
-        backgroundColor: isError
-            ? const Color(0xFFE53E3E)
-            : const Color(0xFF4CAF50),
-        duration: Duration(seconds: isError ? 4 : 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    AppToast.show(
+      context,
+      message,
+      type: isError ? ToastType.error : ToastType.success,
     );
   }
 

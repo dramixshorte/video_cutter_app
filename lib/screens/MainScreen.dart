@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:video_cutter_app/dashboard_screen.dart';
-import 'package:video_cutter_app/screens/SeriesListScreen.dart';
 import 'package:video_cutter_app/screens/VideoCutterScreen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -13,10 +12,10 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const SeriesListScreen(),
-    const VideoCutterScreen(),
+  final List<Widget> _screens = const [
+    DashboardScreen(),
+    Center(child: Text('قريباً - شاشة المسلسلات')),
+    VideoCutterScreen(),
   ];
 
   @override
@@ -95,12 +94,19 @@ class _MainScreenState extends State<MainScreen> {
                   duration: Duration(milliseconds: 300),
                   padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: isSelected ? Color.fromARGB(255, 255, 99, 185) : Colors.transparent,
+                    color: isSelected
+                        ? Color.fromARGB(255, 255, 99, 185)
+                        : Colors.transparent,
                     shape: BoxShape.circle,
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: Color.fromARGB(255, 255, 99, 138).withOpacity(0.4),
+                              color: Color.fromARGB(
+                                255,
+                                255,
+                                99,
+                                138,
+                              ).withOpacity(0.4),
                               blurRadius: 8,
                               spreadRadius: 2,
                             ),
@@ -117,7 +123,9 @@ class _MainScreenState extends State<MainScreen> {
                 AnimatedDefaultTextStyle(
                   duration: Duration(milliseconds: 300),
                   style: TextStyle(
-                    color: isSelected ? Color.fromARGB(255, 255, 2, 57) : Colors.white70,
+                    color: isSelected
+                        ? Color.fromARGB(255, 255, 2, 57)
+                        : Colors.white70,
                     fontSize: isSelected ? 12 : 11,
                     fontWeight: isSelected
                         ? FontWeight.bold

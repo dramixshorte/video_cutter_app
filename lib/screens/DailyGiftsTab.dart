@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:video_cutter_app/widgets/app_toast.dart';
 
 class DailyGiftsTab extends StatefulWidget {
   const DailyGiftsTab({super.key});
@@ -75,53 +76,10 @@ class _DailyGiftsTabState extends State<DailyGiftsTab>
     }
   }
 
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 24),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Color(0xFF4CAF50),
-        duration: Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: EdgeInsets.all(16),
-      ),
-    );
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error, color: Colors.white, size: 24),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Color(0xFFF44336),
-        duration: Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: EdgeInsets.all(16),
-      ),
-    );
-  }
+  void _showSuccessSnackBar(String message) =>
+      AppToast.show(context, message, type: ToastType.success);
+  void _showErrorSnackBar(String message) =>
+      AppToast.show(context, message, type: ToastType.error);
 
   List<dynamic> get _filteredGifts {
     if (_searchQuery.isEmpty) return _gifts;

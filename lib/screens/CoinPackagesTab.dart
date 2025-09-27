@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:video_cutter_app/widgets/app_toast.dart';
 
 class CoinPackagesTab extends StatefulWidget {
   const CoinPackagesTab({super.key});
@@ -75,53 +76,10 @@ class _CoinPackagesTabState extends State<CoinPackagesTab>
     }
   }
 
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 24),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Color(0xFF4CAF50),
-        duration: Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: EdgeInsets.all(16),
-      ),
-    );
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error, color: Colors.white, size: 24),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Color(0xFFF44336),
-        duration: Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: EdgeInsets.all(16),
-      ),
-    );
-  }
+  void _showSuccessSnackBar(String message) =>
+      AppToast.show(context, message, type: ToastType.success);
+  void _showErrorSnackBar(String message) =>
+      AppToast.show(context, message, type: ToastType.error);
 
   List<dynamic> get _filteredPackages {
     if (_searchQuery.isEmpty) return _packages;
@@ -145,72 +103,35 @@ class _CoinPackagesTabState extends State<CoinPackagesTab>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF1E1E2E),
+      backgroundColor: const Color(0xFF1E1E2E),
       body: SafeArea(
-        child: _isLoading ? _buildLoadingWidget() : _buildMainContent(),
-      ),
-    );
-  }
-
-  Widget _buildLoadingWidget() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E1E2E), Color(0xFF2D2D44), Color(0xFF3D3D5A)],
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                shape: BoxShape.circle,
+        child: _isLoading
+            ? _buildLoadingWidget()
+            : Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF1E1E2E),
+                      Color(0xFF2D2D44),
+                      Color(0xFF3D3D5A),
+                    ],
+                  ),
+                ),
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: Column(
+                      children: [
+                        _buildHeader(),
+                        Expanded(child: _buildPackagesList()),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
-                strokeWidth: 3,
-              ),
-            ),
-            SizedBox(height: 24),
-            Text(
-              'جاري تحميل حزم العملات...',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMainContent() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E1E2E), Color(0xFF2D2D44), Color(0xFF3D3D5A)],
-        ),
-      ),
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(child: _buildPackagesList()),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -360,6 +281,32 @@ class _CoinPackagesTabState extends State<CoinPackagesTab>
         final package = filteredPackages[index];
         return _buildPackageCard(package, index);
       },
+    );
+  }
+
+  Widget _buildLoadingWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'جاري تحميل الحزم...',
+            style: TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+        ],
+      ),
     );
   }
 
