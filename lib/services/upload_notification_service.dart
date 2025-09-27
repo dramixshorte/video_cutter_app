@@ -20,10 +20,10 @@ class UploadNotificationService {
   static const _channelName = 'رفع الحلقات';
   static const _channelDesc =
       'إشعار مستمر يوضح تقدم رفع الحلقات مع تحكم بالإيقاف المؤقت والاستئناف.';
-  static const _notificationId = 4440;
 
   Future<void> init() async {
     if (_initialized) return;
+    if (kDebugMode) debugPrint('[UploadNotif] init start');
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const init = InitializationSettings(android: androidInit);
     await _plugin.initialize(
@@ -71,6 +71,7 @@ class UploadNotificationService {
         >()
         ?.createNotificationChannel(channel);
     _initialized = true;
+    if (kDebugMode) debugPrint('[UploadNotif] channel created & initialized');
     _bindStream();
   }
 
@@ -80,65 +81,74 @@ class UploadNotificationService {
   }
 
   bool _collapsed = false;
+  bool _foregroundStarted =
+      false; // ensure startForeground called only once per active session
 
   Future<void> _onUploadUpdate(UploadProgressSnapshot snap) async {
     if (!_initialized) return;
-    if (snap.status == UploadStatus.idle ||
-        snap.status == UploadStatus.completed ||
+    if (kDebugMode)
+      debugPrint(
+        '[UploadNotif] snapshot status=${snap.status} overall=${snap.overallProgress} ep=${snap.currentEpisodeProgress}',
+      );
+    if (snap.status == UploadStatus.idle) {
+      if (_foregroundStarted) {
+        try {
+          await _methodChannel.invokeMethod('stopForeground');
+        } catch (_) {}
+        _foregroundStarted = false;
+      }
+      return;
+    }
+    if (snap.status == UploadStatus.completed ||
         snap.status == UploadStatus.error ||
         snap.status == UploadStatus.canceled) {
-      // Stop foreground service when no active upload
+      // Let native side show final (we can also send a last update with status)
       try {
-        await _methodChannel.invokeMethod('stopForeground');
+        await _methodChannel.invokeMethod('updateForegroundFull', {
+          'title': (snap.status == UploadStatus.completed)
+              ? 'اكتمل الرفع'
+              : (snap.status == UploadStatus.error
+                    ? 'فشل الرفع'
+                    : 'تم إلغاء الرفع'),
+          'message': snap.message,
+          'overallProgress': (snap.overallProgress * 100).round(),
+          'episodeProgress': (snap.currentEpisodeProgress * 100).round(),
+          'episodeIndex': snap.currentEpisodeNumber,
+          'totalEpisodes': snap.totalEpisodes,
+          'status': _mapStatus(snap.status),
+          'paused': false,
+          'hasLocalEpisodes': snap.totalEpisodes > 0,
+          'collapsed': _collapsed,
+        });
       } catch (_) {}
-      // Show a final summary then cancel after short delay
-      if (snap.status == UploadStatus.completed) {
-        await _show(
-          baseTitle: 'اكتمل الرفع',
-          body: snap.message,
-          progress: 1,
-          showProgress: false,
-          ongoing: false,
-        );
-        Future.delayed(
-          const Duration(seconds: 4),
-          () => _plugin.cancel(_notificationId),
-        );
-      } else if (snap.status == UploadStatus.error) {
-        await _show(
-          baseTitle: 'فشل الرفع',
-          body: snap.message,
-          progress: 0,
-          showProgress: false,
-          ongoing: false,
-        );
-        Future.delayed(
-          const Duration(seconds: 6),
-          () => _plugin.cancel(_notificationId),
-        );
-      } else if (snap.status == UploadStatus.canceled) {
-        await _show(
-          baseTitle: 'تم إلغاء الرفع',
-          body: snap.message,
-          progress: 0,
-          showProgress: false,
-          ongoing: false,
-        );
-        Future.delayed(
-          const Duration(seconds: 3),
-          () => _plugin.cancel(_notificationId),
-        );
-      } else {
-        await _plugin.cancel(_notificationId);
-      }
+      // Optionally stop after short delay
+      Future.delayed(const Duration(seconds: 5), () async {
+        if (_foregroundStarted) {
+          try {
+            await _methodChannel.invokeMethod('stopForeground');
+          } catch (_) {}
+          _foregroundStarted = false;
+        }
+      });
       return;
     }
 
     final isPaused = snap.status == UploadStatus.paused;
     final titleBase = isPaused ? 'موقوف مؤقتاً' : 'رفع الحلقات';
-    final overallPct = (snap.overallProgress * 100)
-        .clamp(0, 100)
-        .toStringAsFixed(0);
+    // Smooth overall: base overallProgress (completed episodes fraction) + current partial
+    double smoothOverall = snap.overallProgress;
+    if (snap.status == UploadStatus.uploadingEpisodes &&
+        snap.totalEpisodes > 0 &&
+        snap.currentEpisodeNumber > 0) {
+      final perEpisode = 1.0 / snap.totalEpisodes;
+      // overallProgress already counts fully finished episodes (uploaded variable in manager)
+      // Add current partial minus any double count: if overallProgress already includes only finished episodes, safe to add.
+      final finishedFraction =
+          snap.overallProgress; // episodes fully done / total
+      final partial = snap.currentEpisodeProgress * perEpisode;
+      smoothOverall = (finishedFraction + partial).clamp(0.0, 1.0);
+    }
+    final overallPct = (smoothOverall * 100).clamp(0, 100).toStringAsFixed(0);
     final episodeLine =
         (snap.status == UploadStatus.uploadingEpisodes &&
             snap.totalEpisodes > 0)
@@ -151,15 +161,20 @@ class UploadNotificationService {
     final title = '$titleBase – $overallPct%';
     // Ensure foreground service is running & update native notification (placeholder until RemoteViews phase)
     try {
-      // Start service if needed (cheap no-op if already running)
-      await _methodChannel.invokeMethod('startForeground', {
-        'title': title,
-        'text': body,
-      });
+      // Start service once
+      if (!_foregroundStarted) {
+        // Set flag first to prevent re-entrancy if another snapshot lands while awaiting native call
+        _foregroundStarted = true;
+        await _methodChannel.invokeMethod('startForeground', {
+          'title': title,
+          'text': body,
+        });
+        if (kDebugMode) debugPrint('[UploadNotif] startForeground sent');
+      }
       await _methodChannel.invokeMethod('updateForegroundFull', {
         'title': title,
         'message': snap.message,
-        'overallProgress': (snap.overallProgress * 100).round(),
+        'overallProgress': (smoothOverall * 100).round(),
         'episodeProgress': (snap.currentEpisodeProgress * 100).round(),
         'episodeIndex': snap.currentEpisodeNumber,
         'totalEpisodes': snap.totalEpisodes,
@@ -168,17 +183,12 @@ class UploadNotificationService {
         'hasLocalEpisodes': snap.totalEpisodes > 0,
         'collapsed': _collapsed,
       });
-    } catch (_) {
+      if (kDebugMode) debugPrint('[UploadNotif] updateForegroundFull sent');
+    } catch (err) {
+      if (kDebugMode) debugPrint('[UploadNotif] native update failed: $err');
       /* native path failed - still show plugin notification */
     }
-    await _show(
-      baseTitle: title,
-      body: body,
-      progress: snap.overallProgress.clamp(0, 1),
-      showProgress: true,
-      ongoing: !isPaused,
-      isPaused: isPaused,
-    );
+    // تم إلغاء إشعار Flutter المؤقت (fallback) للاعتماد على إشعار الخدمة المخصص فقط.
   }
 
   String _mapStatus(UploadStatus status) {
@@ -192,57 +202,6 @@ class UploadNotificationService {
       default:
         return 'running';
     }
-  }
-
-  Future<void> _show({
-    required String baseTitle,
-    required String body,
-    required double progress,
-    required bool showProgress,
-    required bool ongoing,
-    bool isPaused = false,
-  }) async {
-    final androidDetails = AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDesc,
-      onlyAlertOnce: true,
-      showProgress: showProgress,
-      maxProgress: 1000,
-      progress: (progress * 1000).round(),
-      ongoing: ongoing,
-      importance: Importance.low,
-      priority: Priority.low,
-      playSound: false,
-      color: const Color(0xFF6C63FF),
-      colorized: true,
-      styleInformation: BigTextStyleInformation(
-        body,
-        contentTitle: baseTitle,
-        htmlFormatContentTitle: false,
-        htmlFormatBigText: false,
-      ),
-      actions: [
-        AndroidNotificationAction(
-          isPaused ? 'resume_upload' : 'pause_upload',
-          isPaused ? 'استئناف' : 'إيقاف مؤقت',
-          showsUserInterface: false,
-        ),
-        AndroidNotificationAction(
-          'cancel_upload',
-          'إلغاء',
-          showsUserInterface: false,
-        ),
-      ],
-    );
-    final details = NotificationDetails(android: androidDetails);
-    await _plugin.show(
-      _notificationId,
-      baseTitle,
-      body,
-      details,
-      payload: 'upload',
-    );
   }
 
   Future<void> _onNotificationResponse(NotificationResponse resp) async {

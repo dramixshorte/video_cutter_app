@@ -8,9 +8,18 @@ import 'services/upload_notification_service.dart';
 import 'screens/series_list_screen.dart';
 import 'widgets/global_upload_panel.dart';
 import 'screens/DashboardSettingsScreen.dart';
+import 'dart:io' show Platform;
+import 'package:permission_handler/permission_handler.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // طلب إذن الإشعارات (Android 13+) مبكراً
+  if (Platform.isAndroid) {
+    final notifStatus = await Permission.notification.status;
+    if (!notifStatus.isGranted) {
+      await Permission.notification.request();
+    }
+  }
 
   // التقاط جميع الأخطاء غير المعالجة لمنع إغلاق التطبيق فجأة
   FlutterError.onError = (FlutterErrorDetails details) {

@@ -1,21 +1,39 @@
 package com.example.video_cutter_app
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.Bundle
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
+import android.widget.RemoteViews
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
+
 class MainActivity : FlutterActivity() {
 	private val channelName = "upload_foreground_channel"
 
+	override fun onCreate(savedInstanceState: android.os.Bundle?) {
+		super.onCreate(savedInstanceState)
+		// Channel will also be (re)attached in configureFlutterEngine, but we create a lazy placeholder to avoid missing plugin race early during first frames.
+	}
+
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
-		// Store channel reference globally so Service can call back into Dart when user presses notification actions
-		UploadChannelBridge.methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
-		val channel = UploadChannelBridge.methodChannel
-		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
+		val messenger = flutterEngine.dartExecutor.binaryMessenger
+		// Single instance
+		if (UploadChannelBridge.methodChannel == null) {
+			UploadChannelBridge.methodChannel = MethodChannel(messenger, channelName)
+		}
+		val channel = UploadChannelBridge.methodChannel ?: MethodChannel(messenger, channelName).also { UploadChannelBridge.methodChannel = it }
+		channel.setMethodCallHandler { call, result ->
 			when (call.method) {
 				"startForeground" -> {
 					val title: String = call.argument<String>("title") ?: "رفع الحلقات"
@@ -86,18 +104,7 @@ class MainActivity : FlutterActivity() {
 	}
 }
 
-/* Foreground service implementation (initial, placeholder RemoteViews to be replaced by custom layout later) */
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
-import android.content.Context
-import android.content.Intent
-import android.os.IBinder
-import androidx.core.app.NotificationCompat
-import android.widget.RemoteViews
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
+// Foreground service implementation
 
 class UploadForegroundService : Service() {
 	companion object {
@@ -124,6 +131,7 @@ class UploadForegroundService : Service() {
 		@Volatile private var lastStatus: String = "running" // running|paused|completed|error
 		@Volatile private var lastHasLocal: Boolean = true
 		@Volatile private var lastCollapsed: Boolean = false
+		@Volatile private var terminated: Boolean = false
 
 		fun updateProgress(context: Context, title: String, text: String, progress: Int) {
 			val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -148,6 +156,7 @@ class UploadForegroundService : Service() {
 			hasLocal: Boolean,
 			collapsed: Boolean
 		) {
+			android.util.Log.d("UploadNotifNative", "updateAdvanced title=$title overall=$overallProgress episode=$episodeProgress status=$status collapsed=$collapsed")
 			val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 			ensureChannel(nm)
 			lastTitle = title
@@ -160,19 +169,28 @@ class UploadForegroundService : Service() {
 			lastPaused = paused || status == "paused"
 			lastHasLocal = hasLocal
 			lastCollapsed = collapsed
+			if (!terminated && status == "error") {
+				// Auto hide on failure per requirement
+				terminated = true
+				requestStop(context)
+				return
+			}
 			val notif = buildNotification(context)
 			nm.notify(NOTIF_ID, notif)
 		}
 
 		private fun baseBuilder(context: Context, title: String, text: String): NotificationCompat.Builder {
+			// Use app launcher icon or custom upload icon for brand consistency
+			val smallIconId = R.drawable.ic_upload_white.takeIf { try { context.resources.getResourceName(R.drawable.ic_upload_white); true } catch (_: Exception) { false } } ?: R.mipmap.ic_launcher
 			return NotificationCompat.Builder(context, CHANNEL_ID)
-				.setSmallIcon(android.R.drawable.stat_sys_upload)
+				.setSmallIcon(smallIconId)
 				.setOngoing(true)
 				.setPriority(NotificationCompat.PRIORITY_LOW)
 				.setOnlyAlertOnce(true)
 		}
 
 		private fun buildNotification(context: Context): Notification {
+			android.util.Log.d("UploadNotifNative", "buildNotification status=$lastStatus paused=$lastPaused collapsed=$lastCollapsed overall=$lastProgress ep=$lastEpisodeProgress")
 			// Decide icon based on status / paused
 			val statusIcon = when {
 				lastStatus == "completed" -> R.drawable.ic_done_white
@@ -180,9 +198,18 @@ class UploadForegroundService : Service() {
 				lastPaused -> R.drawable.ic_play_white
 				else -> R.drawable.ic_upload_white
 			}
-			val contentView = RemoteViews(context.packageName,
-				if (lastCollapsed) R.layout.notif_upload_collapsed else R.layout.notif_upload_full
-			)
+			val contentView = try {
+				RemoteViews(context.packageName,
+					if (lastCollapsed) R.layout.notif_upload_collapsed else R.layout.notif_upload_full
+				)
+			} catch (e: Exception) {
+				android.util.Log.e("UploadNotifNative", "RemoteViews inflate failed, fallback basic notification: ${e.message}")
+				return baseBuilder(context, lastTitle, lastText)
+					.setContentTitle(lastTitle)
+					.setContentText(lastText.take(60))
+					.setOngoing(true)
+					.build()
+			}
 			// In collapsed layout we only show overall progress subset
 			contentView.setTextViewText(R.id.title, lastTitle)
 			// Common overall progress handling
@@ -226,34 +253,36 @@ class UploadForegroundService : Service() {
 			val builder = baseBuilder(context, lastTitle, lastText)
 			builder.setCustomContentView(contentView)
 			// Provide big content view always full layout for expansion
-			val big = RemoteViews(context.packageName, R.layout.notif_upload_full)
-			big.setTextViewText(R.id.title, lastTitle)
-			big.setTextViewText(R.id.message, lastText)
-			if (lastProgress in 0..100) {
-				big.setProgressBar(R.id.progress_overall, 100, lastProgress, false)
-				big.setTextViewText(R.id.percent_overall, "${lastProgress}%")
-			} else {
-				big.setProgressBar(R.id.progress_overall, 0, 0, true)
-				big.setTextViewText(R.id.percent_overall, "")
-			}
-			big.setImageViewResource(R.id.icon_status, statusIcon)
-			if (lastTotalEpisodes > 0) {
-				if (lastEpisodeProgress in 0..100) {
-					big.setProgressBar(R.id.progress_episode, 100, lastEpisodeProgress, false)
-					big.setTextViewText(R.id.percent_episode, "${lastEpisodeProgress}%")
+			val big = try { RemoteViews(context.packageName, R.layout.notif_upload_full) } catch (e: Exception) { null }
+			big?.apply {
+				setTextViewText(R.id.title, lastTitle)
+				setTextViewText(R.id.message, lastText)
+				if (lastProgress in 0..100) {
+					setProgressBar(R.id.progress_overall, 100, lastProgress, false)
+					setTextViewText(R.id.percent_overall, "${lastProgress}%")
 				} else {
-					big.setProgressBar(R.id.progress_episode, 0, 0, true)
-					big.setTextViewText(R.id.percent_episode, "")
+					setProgressBar(R.id.progress_overall, 0, 0, true)
+					setTextViewText(R.id.percent_overall, "")
 				}
-				big.setTextViewText(R.id.label_episode, "الحلقة ${lastEpisodeIndex}/${lastTotalEpisodes}")
+				setImageViewResource(R.id.icon_status, statusIcon)
+				if (lastTotalEpisodes > 0) {
+					if (lastEpisodeProgress in 0..100) {
+						setProgressBar(R.id.progress_episode, 100, lastEpisodeProgress, false)
+						setTextViewText(R.id.percent_episode, "${lastEpisodeProgress}%")
+					} else {
+						setProgressBar(R.id.progress_episode, 0, 0, true)
+						setTextViewText(R.id.percent_episode, "")
+					}
+					setTextViewText(R.id.label_episode, "الحلقة ${lastEpisodeIndex}/${lastTotalEpisodes}")
+				}
+				val pauseResumeAction2 = if (lastPaused) ACTION_RESUME else ACTION_PAUSE
+				setOnClickPendingIntent(R.id.btn_pause_resume, pendingAction(context, pauseResumeAction2))
+				setImageViewResource(R.id.btn_pause_resume, if (lastPaused) R.drawable.ic_play_white else R.drawable.ic_pause_white)
+				setOnClickPendingIntent(R.id.btn_clean, pendingAction(context, ACTION_CLEAN))
+				setOnClickPendingIntent(R.id.btn_minimize, pendingAction(context, ACTION_TOGGLE_COLLAPSE))
+				setOnClickPendingIntent(R.id.btn_cancel, pendingAction(context, ACTION_CANCEL))
 			}
-			val pauseResumeAction2 = if (lastPaused) ACTION_RESUME else ACTION_PAUSE
-			big.setOnClickPendingIntent(R.id.btn_pause_resume, pendingAction(context, pauseResumeAction2))
-			big.setImageViewResource(R.id.btn_pause_resume, if (lastPaused) R.drawable.ic_play_white else R.drawable.ic_pause_white)
-			big.setOnClickPendingIntent(R.id.btn_clean, pendingAction(context, ACTION_CLEAN))
-			big.setOnClickPendingIntent(R.id.btn_minimize, pendingAction(context, ACTION_TOGGLE_COLLAPSE))
-			big.setOnClickPendingIntent(R.id.btn_cancel, pendingAction(context, ACTION_CANCEL))
-			builder.setCustomBigContentView(big)
+			if (big != null) builder.setCustomBigContentView(big)
 			return builder.build()
 		}
 
@@ -265,9 +294,19 @@ class UploadForegroundService : Service() {
 
 		private fun ensureChannel(nm: NotificationManager) {
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-				val ch = NotificationChannel(CHANNEL_ID, "رفع الحلقات (Foreground)", NotificationManager.IMPORTANCE_LOW)
+				val ch = NotificationChannel(CHANNEL_ID, "رفع الحلقات (Foreground)", NotificationManager.IMPORTANCE_DEFAULT).apply {
+					setShowBadge(false)
+					lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+					setSound(null, null)
+					enableVibration(false)
+				}
 				nm.createNotificationChannel(ch)
 			}
+		}
+
+		private fun requestStop(context: Context) {
+			val intent = Intent(context, UploadForegroundService::class.java).apply { action = ACTION_STOP }
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
 		}
 	}
 
@@ -308,8 +347,10 @@ class UploadForegroundService : Service() {
 				START_STICKY
 			}
 			ACTION_CANCEL -> {
-				// Show immediate cancel visual then stop
-				stopForeground(STOP_FOREGROUND_DETACH)
+				// Remove notification completely when user cancels
+				try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { stopForeground(STOP_FOREGROUND_DETACH) }
+				val nm2 = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+				nm2.cancel(NOTIF_ID)
 				stopSelf()
 					UploadChannelBridge.methodChannel?.invokeMethod("nativeCancel", null)
 					START_NOT_STICKY

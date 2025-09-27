@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="horizontal"
-    android:padding="10dp"
     android:gravity="center_vertical"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/notif_upload_bg">
+    android:background="#FF6C63FF"
+    android:paddingStart="14dp"
+    android:paddingEnd="10dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
 
     <ImageView
         android:id="@+id/icon_status"
@@ -33,11 +36,11 @@
         <ProgressBar
             android:id="@+id/progress_overall"
             style="@android:style/Widget.ProgressBar.Horizontal"
-            android:layout_width="120dp"
-            android:layout_height="8dp"
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
             android:max="100"
             android:indeterminate="true"
-            android:progressDrawable="@drawable/notif_progress_bar"
+            android:progressDrawable="@drawable/notif_progress_bar_simple"
             android:layout_marginTop="4dp" />
     </LinearLayout>
 
@@ -53,11 +56,11 @@
 
     <ImageView
         android:id="@+id/btn_restore"
-        android:layout_width="30dp"
-        android:layout_height="30dp"
-        android:padding="6dp"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:padding="7dp"
         android:src="@drawable/ic_restore_white"
-        android:contentDescription="استرجاع"
-        android:background="@drawable/notif_icon_bg" />
+        android:background="@drawable/notif_icon_bg_circle"
+        android:contentDescription="استرجاع" />
 
 </LinearLayout>
