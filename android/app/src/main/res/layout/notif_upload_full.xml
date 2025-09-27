@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/notif_upload_bg">
+
+    <!-- Title row with action icons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:id="@+id/icon_status"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_play_white"
+            android:tint="@android:color/white" />
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="رفع الحلقات"
+            android:textStyle="bold"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textSize="13sp"
+            android:textColor="@android:color/white" />
+
+        <ImageView
+            android:id="@+id/btn_clean"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_clean_white"
+            android:contentDescription="تنظيف"
+            android:background="@drawable/notif_icon_bg" />
+        <ImageView
+            android:id="@+id/btn_pause_resume"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_pause_white"
+            android:contentDescription="إيقاف مؤقت"
+            android:background="@drawable/notif_icon_bg" />
+        <ImageView
+            android:id="@+id/btn_minimize"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_minimize_white"
+            android:contentDescription="تصغير"
+            android:background="@drawable/notif_icon_bg" />
+        <ImageView
+            android:id="@+id/btn_cancel"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_cancel_white"
+            android:contentDescription="إلغاء"
+            android:background="@drawable/notif_icon_bg" />
+    </LinearLayout>
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="10dp" />
+
+    <!-- Overall progress -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ProgressBar
+            android:id="@+id/progress_overall"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="0dp"
+            android:layout_height="10dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:indeterminate="true"
+            android:progressDrawable="@drawable/notif_progress_bar" />
+        <TextView
+            android:id="@+id/percent_overall"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="0%"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:gravity="end"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+    <TextView
+        android:id="@+id/label_overall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="إجمالي الرفع"
+        android:textSize="11sp"
+        android:textColor="#DCD9FF" />
+
+    <!-- Episode progress -->
+    <LinearLayout
+        android:id="@+id/episode_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="8dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <ProgressBar
+                android:id="@+id/progress_episode"
+                style="@android:style/Widget.ProgressBar.Horizontal"
+                android:layout_width="0dp"
+                android:layout_height="10dp"
+                android:layout_weight="1"
+                android:max="100"
+                android:indeterminate="true"
+                android:progressDrawable="@drawable/notif_progress_bar" />
+            <TextView
+                android:id="@+id/percent_episode"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="0%"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:gravity="end"
+                android:textColor="@android:color/white" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/label_episode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="الحلقة 0/0"
+            android:textSize="11sp"
+            android:textColor="#DCD9FF" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="جارٍ التحضير..."
+        android:textSize="11sp"
+        android:maxLines="3"
+        android:ellipsize="end"
+        android:textColor="#F7F7FF" />
+
+</LinearLayout>

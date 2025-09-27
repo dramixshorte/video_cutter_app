@@ -1,29 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- أذونات التخزين الأساسية - مطلوبة لجميع إصدارات Android -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage"/>
-    
-    <!-- أذونات Android 13+ للملفات والوسائط -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- Scoped storage used: لا حاجة لأذونات READ/WRITE القديمة أو MANAGE_EXTERNAL_STORAGE -->
+    <!-- نكتفي بأذونات وسائط Android 13+ إن احتجنا قراءة مكتبة المستخدم (يمكن إزالة غير المستعمل) -->
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
-    
-    <!-- أذونات إضافية للتخزين والملفات -->
-    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION"/>
-    <uses-permission android:name="android.permission.MANAGE_DOCUMENTS"/>
-    
-    <!-- أذونات خاصة بأجهزة Xiaomi -->
-    <uses-permission android:name="com.miui.securitycenter.permission.AppPermissionsEditor"/>
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- إذا لم نقرأ ملفات صوت يمكن حذف السطر التالي -->
+    <!-- <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/> -->
     
     <!-- أذونات العمل في الخلفية -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- حصر أنواع الخدمة الأمامية إلى ما نحتاجه فقط (dataSync). نحذف mediaPlayback/specialUse لتقليل الرفض في Android 15 -->
+    <!-- يمكن إضافة FOREGROUND_SERVICE_DATA_SYNC فقط. -->
     
     <!-- أذونات الشبكة والإشعارات -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -79,14 +68,23 @@
         <service
             android:name="de.julianassmann.flutter_background.IsolateHolderService"
             android:exported="false"
-            android:foregroundServiceType="dataSync|specialUse"/>
+            android:foregroundServiceType="dataSync"/>
         <!-- تعيين خدمة Flutter Background Service الرئيسية بأنواع الـ Foreground المطلوبة (Android 14+ / targetSdk 34+) -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:exported="true"
-            android:foregroundServiceType="dataSync|mediaPlayback|specialUse"
+            android:foregroundServiceType="dataSync"
             android:stopWithTask="false"
             tools:replace="android:exported,android:foregroundServiceType" />
+        <!-- Foreground service to keep upload alive with custom notification -->
+        <service
+            android:name=".UploadForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+        <receiver
+            android:name=".UploadActionReceiver"
+            android:exported="false" />
     
     
 

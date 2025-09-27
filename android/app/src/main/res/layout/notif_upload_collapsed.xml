@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="horizontal"
+    android:padding="10dp"
+    android:gravity="center_vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/notif_upload_bg">
+
+    <ImageView
+        android:id="@+id/icon_status"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@drawable/ic_play_white"
+        android:tint="@android:color/white" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="8dp">
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="رفع الحلقات"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="@android:color/white" />
+        <ProgressBar
+            android:id="@+id/progress_overall"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="120dp"
+            android:layout_height="8dp"
+            android:max="100"
+            android:indeterminate="true"
+            android:progressDrawable="@drawable/notif_progress_bar"
+            android:layout_marginTop="4dp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/percent_overall"
+        android:layout_width="44dp"
+        android:layout_height="wrap_content"
+        android:text="0%"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:gravity="end"
+        android:textColor="@android:color/white" />
+
+    <ImageView
+        android:id="@+id/btn_restore"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:padding="6dp"
+        android:src="@drawable/ic_restore_white"
+        android:contentDescription="استرجاع"
+        android:background="@drawable/notif_icon_bg" />
+
+</LinearLayout>

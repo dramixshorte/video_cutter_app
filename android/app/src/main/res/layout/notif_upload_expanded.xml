@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="10dp"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/notif_upload_bg">
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="رفع الحلقات – 0%"
+        android:textStyle="bold"
+        android:textSize="15sp"
+        android:textColor="@android:color/white" />
+
+    <TextView
+        android:id="@+id/episode_line"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="الحلقة 0/0 (0%)"
+        android:textSize="12sp"
+        android:textColor="#ECEBFF"
+        android:layout_marginTop="2dp" />
+
+    <TextView
+        android:id="@+id/message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="جارٍ التحضير..."
+        android:textSize="12sp"
+        android:textColor="#F9F9F9"
+        android:maxLines="3"
+        android:ellipsize="end"
+        android:layout_marginTop="2dp" />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:indeterminate="true"
+        android:max="100"
+        android:layout_marginTop="8dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="6dp">
+
+        <TextView
+            android:id="@+id/percent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0%"
+            android:textColor="@android:color/white"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="10dp">
+
+        <TextView
+            android:id="@+id/btn_pause_resume"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="إيقاف مؤقت"
+            android:textSize="13sp"
+            android:textColor="@android:color/white"
+            android:background="@drawable/notif_btn_primary" />
+
+        <TextView
+            android:id="@+id/btn_cancel"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="إلغاء"
+            android:textSize="13sp"
+            android:textColor="#FFE7E7"
+            android:background="@drawable/notif_btn_danger" />
+    </LinearLayout>
+</LinearLayout>

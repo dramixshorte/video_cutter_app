@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'upload_manager.dart';
 
 /// IDs & channel configuration
@@ -12,6 +14,7 @@ class UploadNotificationService {
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   StreamSubscription? _sub;
+  static const _methodChannel = MethodChannel('upload_foreground_channel');
 
   static const _channelId = 'upload_progress_channel';
   static const _channelName = 'رفع الحلقات';
@@ -28,6 +31,31 @@ class UploadNotificationService {
       onDidReceiveNotificationResponse: _onNotificationResponse,
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
+    // Listen for native action callbacks (pause/resume/cancel)
+    _methodChannel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'nativePause':
+          UploadManager.instance.pauseUpload();
+          break;
+        case 'nativeResume':
+          UploadManager.instance.resumeUpload();
+          break;
+        case 'nativeCancel':
+          UploadManager.instance.cancelUpload();
+          break;
+        case 'nativeClean':
+          // Trigger cleanup of any local temp episodes
+          UploadManager.instance.cleanLocalEpisodes();
+          break;
+        case 'nativeToggle':
+          final collapsed = (call.arguments as Map?)?['collapsed'] == true;
+          _collapsed = collapsed;
+          break;
+        case 'nativeHide':
+          // User hid notification; keep foreground maybe stopped if no active upload
+          break;
+      }
+    });
     // Create channel
     const channel = AndroidNotificationChannel(
       _channelId,
@@ -35,6 +63,7 @@ class UploadNotificationService {
       description: _channelDesc,
       importance: Importance.low,
       showBadge: false,
+      enableVibration: false,
     );
     await _plugin
         .resolvePlatformSpecificImplementation<
@@ -50,12 +79,18 @@ class UploadNotificationService {
     _sub = UploadManager.instance.stream.listen(_onUploadUpdate);
   }
 
+  bool _collapsed = false;
+
   Future<void> _onUploadUpdate(UploadProgressSnapshot snap) async {
     if (!_initialized) return;
     if (snap.status == UploadStatus.idle ||
         snap.status == UploadStatus.completed ||
         snap.status == UploadStatus.error ||
         snap.status == UploadStatus.canceled) {
+      // Stop foreground service when no active upload
+      try {
+        await _methodChannel.invokeMethod('stopForeground');
+      } catch (_) {}
       // Show a final summary then cancel after short delay
       if (snap.status == UploadStatus.completed) {
         await _show(
@@ -100,8 +135,42 @@ class UploadNotificationService {
     }
 
     final isPaused = snap.status == UploadStatus.paused;
-    final title = isPaused ? 'موقوف مؤقتاً' : 'رفع الحلقات';
-    final body = snap.message;
+    final titleBase = isPaused ? 'موقوف مؤقتاً' : 'رفع الحلقات';
+    final overallPct = (snap.overallProgress * 100)
+        .clamp(0, 100)
+        .toStringAsFixed(0);
+    final episodeLine =
+        (snap.status == UploadStatus.uploadingEpisodes &&
+            snap.totalEpisodes > 0)
+        ? 'الحلقة ${snap.currentEpisodeNumber}/${snap.totalEpisodes} (${(snap.currentEpisodeProgress * 100).clamp(0, 100).toStringAsFixed(0)}%)'
+        : '';
+    final body = [
+      snap.message,
+      episodeLine,
+    ].where((e) => e.isNotEmpty).join('\n');
+    final title = '$titleBase – $overallPct%';
+    // Ensure foreground service is running & update native notification (placeholder until RemoteViews phase)
+    try {
+      // Start service if needed (cheap no-op if already running)
+      await _methodChannel.invokeMethod('startForeground', {
+        'title': title,
+        'text': body,
+      });
+      await _methodChannel.invokeMethod('updateForegroundFull', {
+        'title': title,
+        'message': snap.message,
+        'overallProgress': (snap.overallProgress * 100).round(),
+        'episodeProgress': (snap.currentEpisodeProgress * 100).round(),
+        'episodeIndex': snap.currentEpisodeNumber,
+        'totalEpisodes': snap.totalEpisodes,
+        'status': _mapStatus(snap.status),
+        'paused': isPaused,
+        'hasLocalEpisodes': snap.totalEpisodes > 0,
+        'collapsed': _collapsed,
+      });
+    } catch (_) {
+      /* native path failed - still show plugin notification */
+    }
     await _show(
       baseTitle: title,
       body: body,
@@ -110,6 +179,19 @@ class UploadNotificationService {
       ongoing: !isPaused,
       isPaused: isPaused,
     );
+  }
+
+  String _mapStatus(UploadStatus status) {
+    switch (status) {
+      case UploadStatus.paused:
+        return 'paused';
+      case UploadStatus.completed:
+        return 'completed';
+      case UploadStatus.error:
+        return 'error';
+      default:
+        return 'running';
+    }
   }
 
   Future<void> _show({
@@ -132,6 +214,14 @@ class UploadNotificationService {
       importance: Importance.low,
       priority: Priority.low,
       playSound: false,
+      color: const Color(0xFF6C63FF),
+      colorized: true,
+      styleInformation: BigTextStyleInformation(
+        body,
+        contentTitle: baseTitle,
+        htmlFormatContentTitle: false,
+        htmlFormatBigText: false,
+      ),
       actions: [
         AndroidNotificationAction(
           isPaused ? 'resume_upload' : 'pause_upload',
