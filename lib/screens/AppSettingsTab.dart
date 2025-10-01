@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../widgets/AuthDialog.dart';
 
 class AppSettingsTab extends StatefulWidget {
   const AppSettingsTab({super.key});
@@ -14,8 +13,7 @@ class _AppSettingsTabState extends State<AppSettingsTab>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
 
-  Map<String, dynamic> _mohamedSettings = {};
-  Map<String, dynamic> _rivoSettings = {};
+  // Only keep main app settings
   Map<String, dynamic> _mainSettings = {};
 
   bool _isLoading = true;
@@ -27,21 +25,10 @@ class _AppSettingsTabState extends State<AppSettingsTab>
   late Animation<Offset> _slideAnimation;
   late Animation<double> _scaleAnimation;
 
-  int _selectedAppIndex = 0; // 0: محمد، 1: ريفو، 2: أساسي
+  // Only main app
+  int _selectedAppIndex = 0; // only one app
 
   final List<Map<String, dynamic>> _apps = [
-    {
-      'name': 'محمد',
-      'key': 'mohamed',
-      'color': Color(0xFF4CAF50),
-      'icon': Icons.person,
-    },
-    {
-      'name': 'تطبيق ريفو شورت',
-      'key': 'rivo',
-      'color': Color(0xFFFF9800),
-      'icon': Icons.movie,
-    },
     {
       'name': 'التطبيق الأساسي',
       'key': 'main',
@@ -89,46 +76,37 @@ class _AppSettingsTabState extends State<AppSettingsTab>
   }
 
   Map<String, dynamic> get _currentSettings {
-    switch (_selectedAppIndex) {
-      case 0:
-        return _mohamedSettings;
-      case 1:
-        return _rivoSettings;
-      case 2:
-        return _mainSettings;
-      default:
-        return _mohamedSettings;
-    }
+    // Only main settings
+    return _mainSettings;
   }
 
   void _setCurrentSettings(Map<String, dynamic> settings) {
-    switch (_selectedAppIndex) {
-      case 0:
-        _mohamedSettings = settings;
-        break;
-      case 1:
-        _rivoSettings = settings;
-        break;
-      case 2:
-        _mainSettings = settings;
-        break;
-    }
+    _mainSettings = settings;
   }
 
   String get _currentAppKey {
-    return _apps[_selectedAppIndex]['key'];
+    return 'main';
+  }
+
+  // Helper: interpret various server representations as boolean
+  bool _boolFromServer(dynamic val) {
+    if (val == null) return true; // default true to match previous default '1'
+    if (val is bool) return val;
+    final s = val.toString().toLowerCase();
+    if (s == '1' || s == 'true' || s == 'on' || s == 'yes' || s == 'paid' || s == 'مدفوع' || s == 'مفعل') return true;
+    if (s == '0' || s == 'false' || s == 'off' || s == 'no' || s == 'free' || s == 'مجاني' || s == 'معطل') return false;
+    // fallback: consider numeric >0 as true
+    final n = int.tryParse(s);
+    if (n != null) return n > 0;
+    return true;
   }
 
   Future<void> _loadSettings() async {
     setState(() => _isLoading = true);
 
     try {
-      // تحميل إعدادات محمد
-      await _loadAppSettings('mohamed', 0);
-      // تحميل إعدادات ريفو
-      await _loadAppSettings('rivo', 1);
-      // تحميل إعدادات التطبيق الأساسي
-      await _loadAppSettings('main', 2);
+      // Load only main app settings
+      await _loadAppSettings('main', 0);
 
       setState(() => _isLoading = false);
       _animationController.forward();
@@ -164,18 +142,8 @@ class _AppSettingsTabState extends State<AppSettingsTab>
             settings['site_description'] ?? _getDefaultDescription(appKey);
         settings['items_per_page'] = settings['items_per_page'] ?? '20';
         settings['episode_price'] = settings['episode_price'] ?? '10';
-
-        switch (index) {
-          case 0:
-            _mohamedSettings = settings;
-            break;
-          case 1:
-            _rivoSettings = settings;
-            break;
-          case 2:
-            _mainSettings = settings;
-            break;
-        }
+        // Only main
+        _mainSettings = settings;
       }
     } catch (e) {
       print('Error loading $appKey settings: $e');
@@ -308,17 +276,8 @@ class _AppSettingsTabState extends State<AppSettingsTab>
 
           return Expanded(
             child: GestureDetector(
-              onTap: () async {
-                // القفل للتطبيقات المحمية (ريفو والأساسي فقط)
-                if (index == 1 || index == 2) {
-                  // ريفو أو أساسي
-                  final authenticated = await AuthDialog.showPasswordDialog(
-                    context,
-                  );
-                  if (!authenticated) {
-                    return; // لا نتابع إذا لم يتم التوثيق
-                  }
-                }
+              onTap: () {
+                // only one app, just ensure index is set
                 setState(() => _selectedAppIndex = index);
               },
               child: AnimatedContainer(
@@ -712,11 +671,12 @@ class _AppSettingsTabState extends State<AppSettingsTab>
           _buildModeSwitchCard(
             title: 'وضع التطبيق',
             subtitle: 'اختر وضع التطبيق (مجاني أو مدفوع)',
-            value: (_currentSettings['app_mode'] ?? 1) == 1,
+            value: _boolFromServer(_currentSettings['app_mode']),
             onChanged: (bool value) {
               setState(() {
                 Map<String, dynamic> settings = Map.from(_currentSettings);
-                settings['app_mode'] = value ? 1 : 0;
+                // store as '1' or '0' strings to match backend defaults
+                settings['app_mode'] = value ? '1' : '0';
                 _setCurrentSettings(settings);
               });
             },
@@ -734,11 +694,11 @@ class _AppSettingsTabState extends State<AppSettingsTab>
           _buildModeSwitchCard(
             title: 'إعلانات الوضع المجاني',
             subtitle: 'تفعيل الإعلانات في الوضع المجاني',
-            value: (_currentSettings['free_mode_ads'] ?? 1) == 1,
+            value: _boolFromServer(_currentSettings['free_mode_ads']),
             onChanged: (bool value) {
               setState(() {
                 Map<String, dynamic> settings = Map.from(_currentSettings);
-                settings['free_mode_ads'] = value ? 1 : 0;
+                settings['free_mode_ads'] = value ? '1' : '0';
                 _setCurrentSettings(settings);
               });
             },

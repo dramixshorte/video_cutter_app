@@ -86,10 +86,11 @@ class UploadNotificationService {
 
   Future<void> _onUploadUpdate(UploadProgressSnapshot snap) async {
     if (!_initialized) return;
-    if (kDebugMode)
+    if (kDebugMode) {
       debugPrint(
         '[UploadNotif] snapshot status=${snap.status} overall=${snap.overallProgress} ep=${snap.currentEpisodeProgress}',
       );
+    }
     if (snap.status == UploadStatus.idle) {
       if (_foregroundStarted) {
         try {

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_cutter_app/widgets/app_toast.dart';
-import '../widgets/AuthDialog.dart';
 
 class AdmobSettingsTab extends StatefulWidget {
   const AdmobSettingsTab({super.key});
@@ -15,8 +14,7 @@ class _AdmobSettingsTabState extends State<AdmobSettingsTab>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
 
-  Map<String, dynamic> _mohamedSettings = {};
-  Map<String, dynamic> _rivoSettings = {};
+  // Only keep main app settings
   Map<String, dynamic> _mainSettings = {};
 
   bool _isLoading = true;
@@ -25,21 +23,9 @@ class _AdmobSettingsTabState extends State<AdmobSettingsTab>
   late Animation<double> _fadeAnimation;
   late Animation<double> _slideAnimation;
 
-  int _selectedAppIndex = 0; // 0: محمد، 1: ريفو، 2: أساسي
-
+  // only main app
+  int _selectedAppIndex = 0;
   final List<Map<String, dynamic>> _apps = [
-    {
-      'name': 'محمد',
-      'key': 'mohamed',
-      'color': Color(0xFF4CAF50),
-      'icon': Icons.person,
-    },
-    {
-      'name': 'تطبيق ريفو شورت',
-      'key': 'rivo',
-      'color': Color(0xFFFF9800),
-      'icon': Icons.movie,
-    },
     {
       'name': 'التطبيق الأساسي',
       'key': 'main',
@@ -165,46 +151,23 @@ class _AdmobSettingsTabState extends State<AdmobSettingsTab>
   }
 
   Map<String, dynamic> get _currentSettings {
-    switch (_selectedAppIndex) {
-      case 0:
-        return _mohamedSettings;
-      case 1:
-        return _rivoSettings;
-      case 2:
-        return _mainSettings;
-      default:
-        return _mohamedSettings;
-    }
+    return _mainSettings;
   }
 
   void _setCurrentSettings(Map<String, dynamic> settings) {
-    switch (_selectedAppIndex) {
-      case 0:
-        _mohamedSettings = settings;
-        break;
-      case 1:
-        _rivoSettings = settings;
-        break;
-      case 2:
-        _mainSettings = settings;
-        break;
-    }
+    _mainSettings = settings;
   }
 
   String get _currentAppKey {
-    return _apps[_selectedAppIndex]['key'];
+    return 'main';
   }
 
   Future<void> _loadSettings() async {
     setState(() => _isLoading = true);
 
     try {
-      // تحميل إعدادات محمد
-      await _loadAppSettings('mohamed', 0);
-      // تحميل إعدادات ريفو
-      await _loadAppSettings('rivo', 1);
-      // تحميل إعدادات التطبيق الأساسي
-      await _loadAppSettings('main', 2);
+      // Load only main app settings
+      await _loadAppSettings('main', 0);
 
       setState(() => _isLoading = false);
     } catch (e) {
@@ -248,17 +211,8 @@ class _AdmobSettingsTabState extends State<AdmobSettingsTab>
           'Filtered data keys count for $appKey: ${filteredSettings.keys.length}',
         );
 
-        switch (index) {
-          case 0:
-            _mohamedSettings = filteredSettings;
-            break;
-          case 1:
-            _rivoSettings = filteredSettings;
-            break;
-          case 2:
-            _mainSettings = filteredSettings;
-            break;
-        }
+        // only main
+        _mainSettings = filteredSettings;
       }
     } catch (e) {
       print('Error loading $appKey settings: $e');
@@ -321,17 +275,8 @@ class _AdmobSettingsTabState extends State<AdmobSettingsTab>
 
           return Expanded(
             child: GestureDetector(
-              onTap: () async {
-                // القفل للتطبيقات المحمية (ريفو والأساسي فقط)
-                if (index == 1 || index == 2) {
-                  // ريفو أو أساسي
-                  final authenticated = await AuthDialog.showPasswordDialog(
-                    context,
-                  );
-                  if (!authenticated) {
-                    return; // لا نتابع إذا لم يتم التوثيق
-                  }
-                }
+              onTap: () {
+                // no locking/auth anymore — just select
                 setState(() => _selectedAppIndex = index);
               },
               child: AnimatedContainer(
