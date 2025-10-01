@@ -10,7 +10,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
 import 'package:percent_indicator/percent_indicator.dart';
-import 'dart:typed_data';
 
 class SeriesEpisodesScreen extends StatefulWidget {
   final Map<String, dynamic> series;
