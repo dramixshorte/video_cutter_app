@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'dart:io';
+import 'package:video_cutter_app/services/signed_url_service.dart';
 
 class EpisodePlayerScreen extends StatefulWidget {
   final Map<String, dynamic> episode;
@@ -55,16 +57,45 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen>
 
   void _initializePlayer() async {
     try {
-      final videoUrl = _getVideoUrl();
-      if (videoUrl.isEmpty) {
+      // تحديد ما إذا كان لدينا نسخة محلية
+      final rawPath = widget.episode['video_path']?.toString() ?? '';
+      String? chosen;
+      if (rawPath.isNotEmpty && File(rawPath).existsSync()) {
+        chosen = rawPath; // مسار محلي
+      } else {
+        // جلب رابط موقّع للبث
+        final epId = widget.episode['id'];
+        if (epId == null) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+          return;
+        }
+        try {
+          chosen = await SignedUrlService.instance.getSignedUrl(
+            episodeId: epId is int ? epId : int.parse(epId.toString()),
+            mode: 'stream',
+          );
+        } catch (_) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+
+      if (chosen.isEmpty) {
         setState(() {
           _hasError = true;
           _isLoading = false;
         });
         return;
       }
-
-      _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+      _controller = chosen.startsWith('http')
+          ? VideoPlayerController.networkUrl(Uri.parse(chosen))
+          : VideoPlayerController.file(File(chosen));
 
       await _controller!.initialize();
 
@@ -93,17 +124,7 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen>
     }
   }
 
-  String _getVideoUrl() {
-    final videoPath = widget.episode['video_path'] ?? '';
-    if (videoPath.isEmpty) return '';
-
-    // تحقق من نوع الرابط
-    if (videoPath.startsWith('http')) {
-      return videoPath;
-    } else {
-      return 'https://dramaxbox.bbs.tr/App/series_episodes/$videoPath';
-    }
-  }
+  // تم استبدال `_getVideoUrl` بمنطق ديناميكي داخل _initializePlayer (رابط موقّع أو ملف محلي)
 
   void _togglePlayPause() {
     if (_controller == null) return;

@@ -1,9 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Scoped storage used: لا حاجة لأذونات READ/WRITE القديمة أو MANAGE_EXTERNAL_STORAGE -->
-    <!-- نكتفي بأذونات وسائط Android 13+ إن احتجنا قراءة مكتبة المستخدم (يمكن إزالة غير المستعمل) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- تخزين عام: نضيف أذونات مشروطة لدعم نسخ الملف إلى Download/اسم التطبيق -->
+    <!-- Android 13+ (Tiramisu / API 33+) تستخدم READ_MEDIA_*، للإصدارات الأقدم نستخدم READ/WRITE_EXTERNAL_STORAGE -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- أذونات قديمة للإصدارات < 33 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- خيار: عدم استخدام MANAGE_EXTERNAL_STORAGE لأنه سبب للرفض إلا لو احتجنا إدارة كل الملفات -->
     <!-- إذا لم نقرأ ملفات صوت يمكن حذف السطر التالي -->
     <!-- <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/> -->
     
@@ -30,11 +34,10 @@
     <application
         android:label="video_cutter_app"
         android:name="${applicationName}"
-        android:requestLegacyExternalStorage="true" 
-        android:preserveLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
+        android:requestLegacyExternalStorage="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity

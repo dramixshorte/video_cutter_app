@@ -15,6 +15,13 @@ import android.widget.RemoteViews
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.content.ContentValues
+import android.net.Uri
+import android.provider.MediaStore
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import android.os.Environment
 
 
 class MainActivity : FlutterActivity() {
@@ -102,6 +109,113 @@ class MainActivity : FlutterActivity() {
 		}
 		startService(intent)
 	}
+
+	//region MediaStore episode export
+
+	private val mediaStoreChannel = "video_cutter/media_store"
+
+	override fun onPostResume() {
+		super.onPostResume()
+		// Ensure channel exists after engine attachment
+		setupMediaStoreChannel()
+	}
+
+	private fun setupMediaStoreChannel() {
+		val engine = flutterEngine ?: return
+		val messenger = engine.dartExecutor.binaryMessenger
+		MethodChannel(messenger, mediaStoreChannel).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"saveEpisodeFromPath" -> {
+					val path = call.argument<String>("path")
+					val fileNameArg = call.argument<String>("fileName")
+					if (path.isNullOrEmpty()) {
+						result.error("NO_PATH", "path is empty", null); return@setMethodCallHandler
+					}
+					try {
+						val f = File(path)
+						if (!f.exists()) { result.error("NOT_FOUND", "file not found", null); return@setMethodCallHandler }
+						val name = fileNameArg ?: f.nameIfValid()
+						val uri = insertVideoIntoMediaStore(f, name)
+						result.success(uri.toString())
+					} catch (e: Exception) {
+						result.error("SAVE_FAILED", e.message, null)
+					}
+				}
+				"exportToDownloads" -> {
+					val path = call.argument<String>("path")
+					val fileNameArg = call.argument<String>("fileName")
+					if (path.isNullOrEmpty()) { result.error("NO_PATH", "path empty", null); return@setMethodCallHandler }
+					try {
+						val f = File(path)
+						if (!f.exists()) { result.error("NOT_FOUND", "file not found", null); return@setMethodCallHandler }
+						val name = fileNameArg ?: f.nameIfValid()
+						val publicUri = exportToPublicDownloads(f, name)
+						result.success(publicUri)
+					} catch (e: Exception) {
+						result.error("EXPORT_FAIL", e.message, null)
+					}
+				}
+				else -> result.notImplemented()
+			}
+		}
+	}
+
+	private fun File.nameIfValid(): String {
+		return name.takeIf { it.endsWith(".mp4", true) } ?: (name.substringBeforeLast('.') + ".mp4")
+	}
+
+	private fun insertVideoIntoMediaStore(file: File, displayName: String): Uri {
+		val resolver = applicationContext.contentResolver
+		val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+		val values = ContentValues().apply {
+			put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
+			put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+			put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/VideoCutter")
+			put(MediaStore.Video.Media.IS_PENDING, 1)
+		}
+		val uri = resolver.insert(collection, values) ?: throw IllegalStateException("Insert failed")
+		resolver.openOutputStream(uri)?.use { out ->
+			FileInputStream(file).use { input ->
+				input.copyTo(out, 32 * 1024)
+			}
+		} ?: throw IllegalStateException("Stream failed")
+		values.clear()
+		values.put(MediaStore.Video.Media.IS_PENDING, 0)
+		resolver.update(uri, values, null, null)
+		return uri
+	}
+
+	private fun exportToPublicDownloads(file: File, displayName: String): String {
+		return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+			// Use MediaStore Downloads
+			val resolver = applicationContext.contentResolver
+			val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+			val values = ContentValues().apply {
+				put(MediaStore.Downloads.DISPLAY_NAME, displayName)
+				put(MediaStore.Downloads.MIME_TYPE, "video/mp4")
+				put(MediaStore.Downloads.RELATIVE_PATH, "Download/VideoCutter")
+				put(MediaStore.Downloads.IS_PENDING, 1)
+			}
+			val uri = resolver.insert(collection, values) ?: throw IllegalStateException("Insert failed")
+			resolver.openOutputStream(uri)?.use { out -> FileInputStream(file).use { it.copyTo(out, 64 * 1024) } }
+			values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0); resolver.update(uri, values, null, null)
+			uri.toString()
+		} else {
+			@Suppress("DEPRECATION") val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+			val appDir = File(downloads, "VideoCutter").apply { if (!exists()) mkdirs() }
+			var candidate = File(appDir, displayName)
+			var idx = 1
+			while (candidate.exists() && idx < 100) {
+				val base = displayName.substringBeforeLast('.')
+				val ext = displayName.substringAfterLast('.', "mp4")
+				candidate = File(appDir, "${base}(${idx++}).${ext}")
+			}
+			FileInputStream(file).use { input -> FileOutputStream(candidate).use { output -> input.copyTo(output, 64 * 1024) } }
+			candidate.absolutePath
+		}
+	}
+
+	//endregion
 }
 
 // Foreground service implementation

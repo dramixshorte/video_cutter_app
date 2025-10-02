@@ -4,12 +4,16 @@ import 'package:http/http.dart' as http;
 import 'package:video_cutter_app/widgets/app_toast.dart';
 import 'dart:convert';
 import 'EpisodePlayerScreen.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+// استبدلنا التوليد المباشر لاحقاً بخدمة مصغرات متعددة الاستراتيجيات + روابط موقعة
+import 'package:video_cutter_app/services/thumbnail_service.dart';
+import 'package:video_cutter_app/services/signed_url_service.dart';
+import 'package:video_cutter_app/widgets/animated_progress_bar.dart';
+// لم نعد نطلب إذن التخزين لأندرويد 10+ (Scoped Storage)، نحفظ في مساحة التطبيق
+// أزلنا إذن التخزين؛ لم نعد نستخدم permission_handler هنا
+import 'package:video_cutter_app/services/episode_downloader.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
-import 'package:percent_indicator/percent_indicator.dart';
+// أزلنا percent_indicator لصالح AnimatedProgressBar المخصص
 
 class SeriesEpisodesScreen extends StatefulWidget {
   final Map<String, dynamic> series;
@@ -92,133 +96,77 @@ class _SeriesEpisodesScreenState extends State<SeriesEpisodesScreen>
   Future<void> _generateThumbnail(Map<String, dynamic> episode) async {
     final id = episode['id'];
     if (_thumbCache.containsKey(id)) return;
-    final path = episode['video_path']?.toString() ?? '';
-    if (path.isEmpty) return;
-    try {
-      // Try direct thumbnail generation first (works for local files and some URLs)
-      Uint8List? bytes;
+    final videoPath = episode['video_path']?.toString() ?? '';
+    final localPath = episode['local_path']?.toString();
+    if (videoPath.isEmpty && (localPath == null || localPath.isEmpty)) return;
+    // طلب رابط موقّع للمصغرة (إن توفر backend يدعم mode=thumb)
+    if (episode['signed_thumb_url'] == null) {
       try {
-        bytes = await VideoThumbnail.thumbnailData(
-          video: path,
-          imageFormat: ImageFormat.PNG,
-          maxWidth: 512,
-          quality: 75,
+        final signed = await SignedUrlService.instance.getSignedUrl(
+          episodeId: id is int ? id : int.parse(id.toString()),
+          mode: 'thumb',
         );
+        episode['signed_thumb_url'] = signed;
+        setState(() {});
       } catch (_) {
-        bytes = null;
+        // تجاهل، سنحاول توليد محلي
       }
-
-      // If direct generation failed and the path is an HTTP URL, try fetching a small range
-      if (bytes == null &&
-          (path.startsWith('http://') || path.startsWith('https://'))) {
-        try {
-          final tmp = await getTemporaryDirectory();
-          final tmpFile = File('${tmp.path}/ep_thumb_$id');
-          // Try to request the first ~200KB using Range header (server must support it)
-          final resp = await http.get(
-            Uri.parse(path),
-            headers: {'Range': 'bytes=0-200000'},
-          );
-          if (resp.statusCode == 200 || resp.statusCode == 206) {
-            await tmpFile.writeAsBytes(resp.bodyBytes, flush: true);
-            try {
-              bytes = await VideoThumbnail.thumbnailData(
-                video: tmpFile.path,
-                imageFormat: ImageFormat.PNG,
-                maxWidth: 512,
-                quality: 75,
-              );
-            } catch (_) {
-              bytes = null;
-            }
-          }
-          if (await tmpFile.exists()) await tmpFile.delete();
-        } catch (_) {
-          // ignore network/thumb failures
-        }
-      }
-
+    }
+    try {
+      final bytes = await ThumbnailService.instance.getThumbnail(
+        idKey: id.toString(),
+        videoPath: videoPath,
+        localPath: localPath,
+      );
       setState(() => _thumbCache[id] = bytes);
     } catch (_) {
       setState(() => _thumbCache[id] = null);
     }
   }
 
-  double _normalizeProgress(dynamic p) {
-    if (p == null) return 0.0;
-    if (p is double) return p.clamp(0.0, 1.0);
-    if (p is int) return (p > 1) ? (p.clamp(0, 100) / 100) : p.toDouble();
-    final s = p.toString();
-    final d = double.tryParse(s);
-    if (d != null) return d > 1 ? (d.clamp(0, 100) / 100) : d;
-    return 0.0;
-  }
-
   Future<void> _downloadEpisode(Map<String, dynamic> episode) async {
     final id = episode['id'];
-    final url = episode['video_path']?.toString() ?? '';
-    if (url.isEmpty) {
+    String rawPath = episode['video_path']?.toString() ?? '';
+    if (rawPath.isEmpty) {
       _showMessage('لا يوجد ملف للتحميل', isError: true);
       return;
     }
-
-    if (Platform.isAndroid) {
-      final status = await Permission.storage.request();
-      if (!status.isGranted) {
-        _showMessage('مطلوب إذن التخزين', isError: true);
-        return;
-      }
-    }
-
-    String savePath;
+    // جلب رابط موقّع
+    String signedUrl;
     try {
-      if (Platform.isAndroid) {
-        final ext = await getExternalStorageDirectory();
-        final base = ext?.path.split('/Android').first ?? '';
-        final dir = Directory('$base/Download');
-        if (!dir.existsSync()) dir.createSync(recursive: true);
-        // preserve original extension if present
-        String fileExt = 'mp4';
-        try {
-          final uri = Uri.parse(url);
-          final fname = uri.pathSegments.isNotEmpty
-              ? uri.pathSegments.last
-              : '';
-          if (fname.contains('.')) fileExt = fname.split('.').last;
-        } catch (_) {}
-        savePath = '${dir.path}/episode_$id.$fileExt';
-      } else {
-        final dir = await getApplicationDocumentsDirectory();
-        String fileExt = 'mp4';
-        try {
-          final uri = Uri.parse(url);
-          final fname = uri.pathSegments.isNotEmpty
-              ? uri.pathSegments.last
-              : '';
-          if (fname.contains('.')) fileExt = fname.split('.').last;
-        } catch (_) {}
-        savePath = '${dir.path}/episode_$id.$fileExt';
-      }
+      signedUrl = await SignedUrlService.instance.getSignedUrl(
+        episodeId: id is int ? id : int.parse(id.toString()),
+        mode: 'download',
+      );
     } catch (e) {
-      final dir = await getApplicationDocumentsDirectory();
-      savePath = '${dir.path}/episode_$id.mp4';
+      _showMessage('تعذر الحصول على رابط التحميل الآمن', isError: true);
+      return;
     }
-
-    final dio = Dio();
     final token = CancelToken();
     _downloadTokens[id] = token;
     setState(() => _downloadProgress[id] = 0.0);
-
     try {
-      await dio.download(
-        url,
-        savePath,
+      final localPath = await EpisodeDownloader.instance.downloadEpisode(
+        url: signedUrl,
+        id: id,
         cancelToken: token,
-        onReceiveProgress: (r, t) {
-          if (t > 0) setState(() => _downloadProgress[id] = r / t);
-        },
+        onProgress: (p) => setState(() => _downloadProgress[id] = p),
       );
-      _showMessage('تم الحفظ: $savePath');
+      _showMessage('تم التنزيل داخل التطبيق');
+      episode['local_path'] = localPath;
+      for (var i = 0; i < _episodes.length; i++) {
+        if (_episodes[i]['id'] == id) {
+          _episodes[i]['local_path'] = localPath;
+          break;
+        }
+      }
+      for (var i = 0; i < _filteredEpisodes.length; i++) {
+        if (_filteredEpisodes[i]['id'] == id) {
+          _filteredEpisodes[i]['local_path'] = localPath;
+          break;
+        }
+      }
+      setState(() {});
     } catch (e) {
       if (e is DioException && CancelToken.isCancel(e)) {
         _showMessage('تم إلغاء التحميل');
@@ -230,11 +178,6 @@ class _SeriesEpisodesScreenState extends State<SeriesEpisodesScreen>
       _downloadTokens.remove(id);
       setState(() {});
     }
-  }
-
-  void _cancelDownload(dynamic id) {
-    final t = _downloadTokens[id];
-    if (t != null && !t.isCancelled) t.cancel();
   }
 
   void _filterEpisodes(String query) {
@@ -263,18 +206,44 @@ class _SeriesEpisodesScreenState extends State<SeriesEpisodesScreen>
     }
   }
 
-  void _playEpisode(Map<String, dynamic> episode) {
+  Future<void> _playEpisode(Map<String, dynamic> episode) async {
     try {
+      final ep = Map<String, dynamic>.from(episode);
+      final local = ep['local_path']?.toString();
+      if (local != null && local.isNotEmpty && File(local).existsSync()) {
+        ep['video_path'] = local; // تشغيل محلي
+      } else {
+        // احصل على رابط بث موقّع آمن
+        try {
+          final signed = await SignedUrlService.instance.getSignedUrl(
+            episodeId: ep['id'] is int
+                ? ep['id']
+                : int.parse(ep['id'].toString()),
+            mode: 'stream',
+          );
+          ep['video_path'] = signed;
+        } catch (e) {
+          _showMessage('تعذر الحصول على رابط البث الآمن', isError: true);
+          return;
+        }
+      }
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) =>
-              EpisodePlayerScreen(episode: episode, series: widget.series),
+              EpisodePlayerScreen(episode: ep, series: widget.series),
         ),
       );
     } catch (_) {
       _showMessage('تعذر فتح مشغل الحلقة', isError: true);
     }
+  }
+
+  bool _hasLocalCopy(Map<String, dynamic> episode) {
+    final p = episode['local_path']?.toString();
+    if (p == null || p.isEmpty) return false;
+    return File(p).existsSync();
   }
 
   @override
@@ -378,118 +347,147 @@ class _SeriesEpisodesScreenState extends State<SeriesEpisodesScreen>
             child: Row(
               children: [
                 // Thumbnail: prefer server-provided thumbnail fields, otherwise fall back to generated thumb
-                Builder(builder: (ctx) {
-                  final serverThumb = (ep['thumbnail'] ?? ep['thumb'] ?? ep['poster_url'])?.toString() ?? '';
-                  Widget img;
-                  if (serverThumb.isNotEmpty) {
-                    img = Image.network(
-                      serverThumb,
-                      width: 140,
-                      height: 84,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) {
-                        if (_thumbCache[id] != null) {
-                          return Image.memory(
-                            _thumbCache[id]!,
+                Builder(
+                  builder: (ctx) {
+                    final serverThumb =
+                        (ep['thumbnail'] ?? ep['thumb'] ?? ep['poster_url'])
+                            ?.toString() ??
+                        '';
+                    Widget img;
+                    if (serverThumb.isNotEmpty) {
+                      img = Image.network(
+                        serverThumb,
+                        width: 140,
+                        height: 84,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) {
+                          if (_thumbCache[id] != null) {
+                            return Image.memory(
+                              _thumbCache[id]!,
+                              width: 140,
+                              height: 84,
+                              fit: BoxFit.cover,
+                            );
+                          }
+                          return Container(
                             width: 140,
                             height: 84,
-                            fit: BoxFit.cover,
+                            color: Colors.black26,
+                            child: const Icon(
+                              Icons.movie_outlined,
+                              color: Colors.white24,
+                            ),
                           );
-                        }
-                        return Container(
-                          width: 140,
-                          height: 84,
-                          color: Colors.black26,
-                          child: const Icon(Icons.movie_outlined, color: Colors.white24),
-                        );
-                      },
-                      loadingBuilder: (c, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          width: 140,
-                          height: 84,
-                          color: Colors.black26,
-                          child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24)),
-                        );
-                      },
-                    );
-                  } else if (_thumbCache[id] != null) {
-                    img = Image.memory(
-                      _thumbCache[id]!,
-                      width: 140,
-                      height: 84,
-                      fit: BoxFit.cover,
-                    );
-                  } else {
-                    img = Container(
-                      width: 140,
-                      height: 84,
-                      color: Colors.black26,
-                      child: const Icon(
-                        Icons.movie_outlined,
-                        color: Colors.white24,
-                      ),
-                    );
-                  }
+                        },
+                        loadingBuilder: (c, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            width: 140,
+                            height: 84,
+                            color: Colors.black26,
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white24,
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    } else if (_thumbCache[id] != null) {
+                      img = Image.memory(
+                        _thumbCache[id]!,
+                        width: 140,
+                        height: 84,
+                        fit: BoxFit.cover,
+                      );
+                    } else {
+                      img = Container(
+                        width: 140,
+                        height: 84,
+                        color: Colors.black26,
+                        child: const Icon(
+                          Icons.movie_outlined,
+                          color: Colors.white24,
+                        ),
+                      );
+                    }
 
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: img,
-                      ),
-                      // Play overlay
-                      Positioned.fill(
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _playEpisode(ep),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Center(
-                              child: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: Colors.black45,
-                                  shape: BoxShape.circle,
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: img,
+                        ),
+                        // Play overlay
+                        Positioned.fill(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _playEpisode(ep),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Center(
+                                child: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black45,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                                child: const Icon(Icons.play_arrow, color: Colors.white),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      // Optional status chip (e.g., نشط)
-                      if ((ep['status'] ?? '').toString().toLowerCase() == 'active')
-                        Positioned(
-                          top: 6,
-                          left: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade700,
-                              borderRadius: BorderRadius.circular(12),
+                        // Optional status chip (e.g., نشط)
+                        if ((ep['status'] ?? '').toString().toLowerCase() ==
+                            'active')
+                          Positioned(
+                            top: 6,
+                            left: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade700,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                'نشط',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
                             ),
-                            child: const Text('نشط', style: TextStyle(color: Colors.white, fontSize: 11)),
                           ),
-                        ),
-                    ],
-                  );
-                }),
+                      ],
+                    );
+                  },
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: Text(
                               ep['title'] ?? 'حلقة',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                height: 1.2,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -497,103 +495,77 @@ class _SeriesEpisodesScreenState extends State<SeriesEpisodesScreen>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      LinearPercentIndicator(
-                        lineHeight: 8.0,
-                        percent: _normalizeProgress(ep['progress']),
-                        backgroundColor: Colors.white12,
-                        progressColor: const Color(0xFF6C63FF),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Horizontal action row: Play | Download (or progress) | Edit | Delete
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Play (icon only)
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF6C63FF),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
-                              onPressed: () => _playEpisode(ep),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-
-                          // Download (icon only) or inline progress
-                          downloading
-                              ? SizedBox(
-                                  width: 130,
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: LinearPercentIndicator(
-                                          lineHeight: 6.0,
-                                          percent: prog,
-                                          backgroundColor: Colors.white12,
-                                          progressColor: Colors.lightBlueAccent,
-                                        ),
-                                      ),
-                                      IconButton(
-                                        onPressed: () => _cancelDownload(id),
-                                        icon: const Icon(Icons.cancel, color: Colors.white70, size: 20),
-                                      ),
-                                    ],
+                      const SizedBox(height: 10),
+                      // اظهار شريط التقدم الاحترافي فقط عند التحميل
+                      if (downloading) ...[
+                        AnimatedProgressBar(
+                          value: prog,
+                          downloading: true,
+                          completed: false,
+                          semanticLabel: 'تحميل الحلقة',
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return Wrap(
+                            spacing: 10,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _circleBtn(
+                                color: const Color(0xFF6C63FF),
+                                icon: Icons.play_arrow,
+                                tooltip: 'تشغيل',
+                                onTap: () => _playEpisode(ep),
+                              ),
+                              // عند التحميل، أظهر شريط التقدم الاحترافي داخل الأزرار
+                              if (downloading)
+                                SizedBox(
+                                  width: 100,
+                                  child: AnimatedProgressBar(
+                                    value: prog,
+                                    downloading: true,
+                                    completed: false,
+                                    semanticLabel: 'تحميل الحلقة',
                                   ),
                                 )
-                              : Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white12,
-                                    shape: BoxShape.circle,
+                              else if (_hasLocalCopy(ep))
+                                _circleBtn(
+                                  color: Colors.green.shade600.withOpacity(
+                                    0.25,
                                   ),
-                                  child: IconButton(
-                                    padding: EdgeInsets.zero,
-                                    icon: const Icon(Icons.download, color: Colors.white, size: 20),
-                                    onPressed: () => _downloadEpisode(ep),
-                                  ),
+                                  icon: Icons.check,
+                                  iconColor: Colors.greenAccent,
+                                  tooltip:
+                                      'محمل محلياً (اضغط مطول لإعادة التحميل)',
+                                  onTap: () {},
+                                  onLongPress: () => _downloadEpisode(ep),
+                                )
+                              else
+                                _circleBtn(
+                                  color: Colors.white12,
+                                  icon: Icons.download,
+                                  tooltip: 'تنزيل',
+                                  onTap: () => _downloadEpisode(ep),
                                 ),
-                          const SizedBox(width: 10),
-
-                          // Edit (icon only)
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white10,
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.edit, color: Colors.white70, size: 18),
-                              onPressed: () => _editEpisodeTitle(ep),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Delete (icon only)
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
-                              onPressed: () => _deleteEpisode(ep),
-                            ),
-                          ),
-                        ],
+                              _circleBtn(
+                                color: Colors.white10,
+                                icon: Icons.edit,
+                                iconColor: Colors.white70,
+                                tooltip: 'تعديل',
+                                onTap: () => _editEpisodeTitle(ep),
+                              ),
+                              _circleBtn(
+                                color: Colors.transparent,
+                                icon: Icons.delete,
+                                iconColor: Colors.redAccent,
+                                tooltip: 'حذف',
+                                onTap: () => _deleteEpisode(ep),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -664,6 +636,30 @@ class _SeriesEpisodesScreenState extends State<SeriesEpisodesScreen>
     } catch (e) {
       _showMessage('فشل في تحديث الحلقة: $e', isError: true);
     }
+  }
+
+  Widget _circleBtn({
+    required Color color,
+    required IconData icon,
+    Color? iconColor,
+    String? tooltip,
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
+  }) {
+    return Material(
+      color: color,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(icon, size: 20, color: iconColor ?? Colors.white),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteEpisode(Map<String, dynamic> episode) async {

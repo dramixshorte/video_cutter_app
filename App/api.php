@@ -64,6 +64,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 
 $action = $_GET['action'] ?? '';
 
+// Shared secret (must match secure_bootstrap.php) - move to env in production
+if (!defined('SECURE_EPISODES_SECRET')) {
+    define('SECURE_EPISODES_SECRET', 'CHANGE_ME_TO_A_LONG_RANDOM_SECRET_64_CHARS_MIN');
+}
+
+function generateEpisodeSignature($episodeId, $type, $ts, $filename) {
+    return hash_hmac('sha256', $episodeId.'|'.$type.'|'.$ts.'|'.$filename, SECURE_EPISODES_SECRET);
+}
+
 try {
     switch ($action) {
         case 'upload_image':
@@ -140,6 +149,34 @@ case 'get_series':
         break;
     case 'get_dashboard_stats':
         getDashboardStats($conn);
+        break;
+    case 'episode_signed_url': // GET: episode_id, mode=stream|download|thumb
+        $episodeId = isset($_GET['episode_id']) ? intval($_GET['episode_id']) : 0;
+        $mode = $_GET['mode'] ?? 'stream';
+        if (!in_array($mode, ['stream','download','thumb'], true)) {
+            echo json_encode(['status'=>'error','message'=>'Invalid mode']);
+            break;
+        }
+        if ($episodeId <= 0) { echo json_encode(['status'=>'error','message'=>'episode_id required']); break; }
+        // Lookup episode filename
+        $stmt = $conn->prepare('SELECT video_path FROM episodes WHERE id = ? LIMIT 1');
+        $stmt->bind_param('i', $episodeId);
+        $stmt->execute();
+        $stmt->bind_result($videoPath);
+        if (!$stmt->fetch()) {
+            echo json_encode(['status'=>'error','message'=>'Episode not found']);
+            $stmt->close();
+            break;
+        }
+        $stmt->close();
+        $filename = basename($videoPath);
+        $ts = time() + 600; // 10 minutes validity
+        $sig = generateEpisodeSignature($episodeId, $mode, $ts, $filename);
+        $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS']==='on' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+        $secureBase = rtrim($base,'/').'/secure';
+        $endpoint = $mode === 'thumb' ? 'thumbnail.php' : ($mode === 'download' ? 'download_episode.php' : 'stream_episode.php');
+        $url = $secureBase.'/'.$endpoint.'?e='.$episodeId.'&t='.$mode.'&ts='.$ts.'&f='.rawurlencode($filename).'&sig='.$sig;
+        echo json_encode(['status'=>'success','url'=>$url,'expires'=>$ts]);
         break;
             
             
@@ -1945,7 +1982,7 @@ function updateAdmobConfig($conn) {
             `interstitial` varchar(255) DEFAULT '',
             `rewarded1` varchar(255) DEFAULT '',
             `rewarded2` varchar(255) DEFAULT '',
-            `rewarded3` varchar(255) DEFAULT '',
+            `rewarded3` DEFAULT '',
             `rewarded4` varchar(255) DEFAULT '',
             `rewarded5` varchar(255) DEFAULT '',
             `rewarded6` varchar(255) DEFAULT '',
@@ -2114,7 +2151,7 @@ function sendNotification($conn) {
         
         // إنشاء الإشعار
         $notification = Notification::create($title, $body);
-        $message = CloudMessage::withTarget('topic', 'all_users')
+        $message = CloudMessage::withTarget('topic', 'all')
             ->withNotification($notification);
         
         // إضافة البيانات الإضافية
